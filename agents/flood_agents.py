@@ -72,16 +72,16 @@ class Person_Agent(GeoAgent):
         
         # Time and state attributes
         self.current_hour = 0            
-        self.resilience = random.uniform(5, 15)  # Flood risk perception
+        self.resilience = random.uniform(5, 15)  # Flood risk perception 
         self.stranded = False
         self.time_stranded = 0
         self.time_injured = 0
         self.time_in_shelter = 0
         
         # Survival thresholds
-        self.injury_duration = random.randint(12, 60)        
-        self.survivability_duration = self.injury_duration + random.randint(70, 120)
-        self.recovery_rate = random.uniform(0, 1)       # in hours
+        self.injury_duration = random.randint(10, 40)   # VALUE UPDATED #      
+        self.survivability_duration = self.injury_duration + random.randint(60, 100) # VALUE UPDATED #
+        self.recovery_rate = random.uniform(0.2, 1)     # VALUE UPDATED #
         self.alive = True
         
         # Decision-making components
@@ -263,13 +263,13 @@ class Person_Agent(GeoAgent):
     def get_hourly_wage(self):
         """Determine hourly wage based on wealth class."""
         if self.wealth_class == "Upper_Class":
-            hourly_wage = random.uniform(250000, 500000)/(365*24)
+            hourly_wage = random.uniform(145000, 250000)/(365*24) # VALUE UPDATED #
         elif self.wealth_class == "Upper_Middle_Class":
-            hourly_wage = random.uniform(100000, 250000)/(365*24)
+            hourly_wage = random.uniform(85000, 144000)/(365*24)  # VALUE UPDATED #
         elif self.wealth_class == "Middle_Class":
-            hourly_wage = random.uniform(50000, 100000)/(365*24)
+            hourly_wage = random.uniform(25000, 84000)/(365*24)   # VALUE UPDATED #
         elif self.wealth_class == "Lower_Class":
-            hourly_wage = random.uniform(0, 50000)/(365*24)
+            hourly_wage = random.uniform(0, 24000)/(365*24)       # VALUE UPDATED #
         
         return hourly_wage
 
@@ -324,7 +324,7 @@ class Person_Agent(GeoAgent):
                     
                     if not business.flooded:
                         self.income -= service_cost  # Deduct service cost from agent's income
-                        business.wealth += service_cost * random.uniform(1,5) 
+                        business.wealth += service_cost * random.uniform(1,1.5)  # VALUE UPDATED #
                     else:
                         business.wealth -= service_cost * random.uniform(10,40) 
                     return
@@ -395,7 +395,7 @@ class Shelter_Agent(GeoAgent):
             
             self.num_sheltered_agents = len(self.sheltered_agents)  # Update the count of rescued agents
             
-            shelter_cost_per_person = random.uniform(0, 50)  # Cost for the support system
+            shelter_cost_per_person = random.uniform(0, 2000)  # Cost for the support system    # VALUE UPDATED #
             shelter_cost = shelter_cost_per_person * self.num_sheltered_agents
             self.wealth -= shelter_cost  # Deduct funds for rescue and sheltering
             
@@ -476,10 +476,10 @@ class Healthcare_Agent(GeoAgent):
             self.num_hospitalized_patients = len(self.hospitalized_agents)  # Update the count of injured patients          
             
             for agent in self.hospitalized_agents:
-                healthcare_cost_per_person = random.uniform(0,100)  # Cost for the support system
+                healthcare_cost_per_person = random.uniform(0,3500)  # Cost for the support system  # VALUE UPDATED #
                 if isinstance(agent, Person_Agent):
                     agent.income -= healthcare_cost_per_person  # Agent spends some money for their care
-                    self.wealth -= healthcare_cost_per_person * random.uniform(0,0.3)   # healthcare gets some profit from agen  
+                    self.wealth -= healthcare_cost_per_person * random.uniform(0,0.4)   # healthcare gets some profit from agen  # VALUE UPDATED #
                     
                     businesses = [bizagent for bizagent in self.model.schedule.agents if isinstance(bizagent, Business_Agent)]                    
                     chosen_business = random.choice(businesses)
@@ -487,7 +487,7 @@ class Healthcare_Agent(GeoAgent):
                     if not chosen_business.flooded:
                         chosen_business.wealth += healthcare_cost_per_person * random.uniform(0.0,0.1)  # Allocate support funds to the chosen business
                     else:
-                        chosen_business.wealth -= healthcare_cost_per_person * random.gauss(10,3)
+                        chosen_business.wealth -= healthcare_cost_per_person * random.gauss(1,20)
                     
             for patient in  self.hospitalized_agents:
                 self.continued_healthcare(patient)
@@ -785,9 +785,9 @@ class Government_Agent(GeoAgent):
         Redistribute wealth to support systems and schools.
         """        
         
-        self.shelter_contribution = random.uniform(0.01, 0.2) * self.model.shelter_gdp
-        self.healthcare_contribution = random.uniform(0.01, 0.2) * self.model.healthcare_gdp
-        self.school_contribution = random.uniform(0.01, 0.2) * self.model.school_gdp
+        self.shelter_contribution = random.uniform(0.05, 0.2) * self.model.shelter_gdp          # VALUE UPDATED #
+        self.healthcare_contribution = random.uniform(0.01, 0.15) * self.model.healthcare_gdp    # VALUE UPDATED #
+        self.school_contribution = random.uniform(0.04, 0.2) * self.model.school_gdp            # VALUE UPDATED #
         
         #healthcare_amount = self.wealth * self.healthcare_contribution
         

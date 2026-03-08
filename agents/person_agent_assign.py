@@ -20,10 +20,10 @@ def create_person_agents(model):
     Parameters:
     - model: The simulation model containing spatial agents and parameters.
     """
-    model.num_upper_class_persons = int(0.024 * model.num_persons)  # 2%
-    model.num_upper_middle_class_persons = int(0.204 * model.num_persons)  # 7%
-    model.num_middle_class_persons = int(0.446 * model.num_persons)  # 24.9%
-    model.num_lower_class_persons = model.num_persons - model.num_upper_class_persons - model.num_upper_middle_class_persons - model.num_middle_class_persons
+    model.num_upper_class_persons = int(0.015 * model.num_persons)  # VALUE UPDATED 1.5% #
+    model.num_upper_middle_class_persons = int(0.041 * model.num_persons)  # VALUE UPDATED 4.1% #
+    model.num_middle_class_persons = int(0.433 * model.num_persons)  # VALUE UPDATED 43.3% #
+    model.num_lower_class_persons = model.num_persons - model.num_upper_class_persons - model.num_upper_middle_class_persons - model.num_middle_class_persons # VALUE UPDATED #
 
     model.wealth_classes = (
         ["Upper_Class"] * model.num_upper_class_persons +
@@ -33,16 +33,16 @@ def create_person_agents(model):
     )
     random.shuffle(model.wealth_classes)
 
-    model.num_indigenous_persons = int(0.05 * model.num_persons)
-    model.num_immigrant_persons = int(0.23 * model.num_persons)
-    model.num_canadian_persons = model.num_persons - model.num_indigenous_persons - model.num_immigrant_persons
+#    model.num_indigenous_persons = int(0.05 * model.num_persons)
+#    model.num_immigrant_persons = int(0.23 * model.num_persons)
+#    model.num_canadian_persons = model.num_persons - model.num_indigenous_persons - model.num_immigrant_persons
 
-    ethnicity_groups = (
-        ["Indigenous"] * model.num_indigenous_persons +
-        ["Immigrant"] * model.num_immigrant_persons +
-        ["Canadian"] * model.num_canadian_persons
-    )
-    random.shuffle(ethnicity_groups)
+#    ethnicity_groups = (
+#        ["Indigenous"] * model.num_indigenous_persons +
+#        ["Immigrant"] * model.num_immigrant_persons +
+#        ["Canadian"] * model.num_canadian_persons
+#    )
+#    random.shuffle(ethnicity_groups)
 
     model.num_working_class_persons = 0
     model.num_age_0_14_persons = 0
@@ -60,7 +60,7 @@ def create_person_agents(model):
         assign_age(model, i, person)
         assign_wealth(model, i, person)
         assign_mobility(model, person)
-        person.ethnicity = ethnicity_groups[i]
+#        person.ethnicity = ethnicity_groups[i]
         assign_education(model, person)
         assign_gender(model, person)
         
@@ -86,15 +86,15 @@ def assign_working_class(model, agent):
 def assign_education(model, person):
     if person.age >= 18:          
         if random.uniform(0,1) <= model.perc_education_people:
-            person.education = 1  # Most educated with full understanding of flood risks
+            person.education = 0.9  # Most educated with full understanding of flood risks
         else:
-            person.education = random.uniform(0.5,0.9)   # Partial education
+            person.education = random.uniform(0.4,0.8)   # Partial education
     else:
-        person.education = 0.4/18*person.age     # Education scales with age for individuals under 18
+        person.education = 0.3/18*person.age     # Education scales with age for individuals under 18   # VALUE UPDATED #
 
 
 def assign_gender(model, person):           
-    perc_male = 0.49
+    perc_male = 0.501
     if random.uniform(0,1) <= perc_male:            
         model.num_male_persons += 1            
         person.gender = "Male"
@@ -104,13 +104,13 @@ def assign_gender(model, person):
         
      
 def assign_age(model, i, person):
-    if i < int(0.16 * model.num_persons):	# Assign age for [0-14] age group
+    if i < int(0.26 * model.num_persons):	# Assign age for [0-14] age group   # VALUE UPDATED 26% #
         person.age = random.randint(0, 14)
         model.num_age_0_14_persons += 1
-    elif  int(0.16 * model.num_persons) <= i < int(0.81 * model.num_persons):	# [15-64] age group
+    elif i < int(0.93 * model.num_persons):	# [15-64] age group                 # VALUE UPDATED 93% = 26 + 67 #
         person.age = random.randint(15, 64)              
         model.num_age_15_64_persons += 1
-    else:  				                # Assign age for [65-100] age group
+    else:  				                # Assign age for [65-100] age group     # VALUE UPDATED 7% #
         person.age = random.randint(65, 100)            
         model.num_age_65_100_persons += 1        
 
@@ -119,13 +119,13 @@ def assign_wealth(model, i, person):
     person.wealth_class = model.wealth_classes[i]  # Assign economy class based on shuffled list
 
     if person.wealth_class == "Upper_Class":
-        person.income = random.uniform(250000, 500000)/365 * 10 #Two weeks saved income
+        person.income = random.uniform(145000, 250000)/365 * 14 #Two weeks saved income
     elif person.wealth_class == "Upper_Middle_Class":
-        person.income = random.uniform(100000, 250000)/365 * 10
+        person.income = random.uniform(85000, 144000)/365 * 14
     elif person.wealth_class == "Middle_Class":
-       person.income = random.uniform(50000, 100000)/365 * 10 
+       person.income = random.uniform(25000, 84000)/365 * 14 
     elif person.wealth_class == "Lower_Class":
-        person.income = random.uniform(0, 50000)/365 * 10 
+        person.income = random.uniform(0, 24000)/365 * 14 
     
     model.persons_gdp += person.income
     model.total_gdp += model.persons_gdp
@@ -134,50 +134,50 @@ def assign_wealth(model, i, person):
 def assign_SES_index(model, agent):   # High value represents high vulnerability
     # Age vulnerability
     if agent.age in [0,14]:
-        age_vul = 1
+        age_vul = 0.9
     elif agent.age in [15-64]:
-        age_vul = 0.1
+        age_vul = 0.3
     else:
-        age_vul = 0.8
+        age_vul = 1
         
     # Education vulnerability 
-    edu_vul = (1-0.9*agent.education)
+    edu_vul = (1-0.8*agent.education)
     
     # Gender vulnerability
     if agent.gender == "Male":
-        gen_vul = 0.1
+        gen_vul = 0.3
     else:
         gen_vul = 1
 
-    # Ethnicity vulnerability
-    if agent.ethnicity == "Canadian":
-        eth_vul = 0.1
-    elif agent.ethnicity == "Immigrant":
-        eth_vul = 0.8
-    else:
-        eth_vul = 1
+#    # Ethnicity vulnerability
+#    if agent.ethnicity == "Canadian":
+#        eth_vul = 0.1
+#    elif agent.ethnicity == "Immigrant":
+#        eth_vul = 0.8
+#    else:
+#        eth_vul = 1
     
     # Wealth status vulnerability
     if agent.wealth_class == "Upper_Class":
-        wth_vul = 0.01
-    elif agent.wealth_class == "Upper_Middle_Class":
         wth_vul = 0.1
+    elif agent.wealth_class == "Upper_Middle_Class":
+        wth_vul = 0.2
     elif agent.wealth_class == "Middle_Class":
-        wth_vul = 0.8
+        wth_vul = 0.85
     else: 
         wth_vul = 1
 
-    agent.SES_1 = (age_vul + edu_vul + gen_vul + eth_vul + wth_vul )/5
-    agent.SES_2 = (age_vul * edu_vul * gen_vul * eth_vul * wth_vul )**(1/5) 
+    agent.SES_1 = (age_vul + edu_vul + gen_vul + wth_vul )/5
+    agent.SES_2 = (age_vul * edu_vul * gen_vul * wth_vul )**(1/5) 
     agent.vulnerability = (agent.SES_1 + agent.SES_2) / 2
     
 
 def assign_mobility(model, person):
     # Define parameters for the beta function of age
-    a_age, b_age = 2, 5
+    a_age, b_age = 4, 5
     
     # Define parameters for the logistic function of wealth
-    k_wealth, x0_wealth = 0.1, 50
+    k_wealth, x0_wealth = 0.5, 55
     
     # Normalize age between 0 and 1
     x_age = person.age / 100
