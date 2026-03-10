@@ -36,7 +36,19 @@ class FloodModel(Model):
         
         self.crs = model_crs
     
-        self.space = StudyArea(self, houses_file, businesses_file, schools_file, shelter_file, healthcare_file, government_file, model_crs)
+        self.space = StudyArea(
+            self,
+            houses_file,
+            businesses_file,
+            schools_file,
+            shelter_file,
+            healthcare_file,
+            government_file,
+            flood_file_1,
+            flood_file_2,
+            flood_file_3,
+            model_crs
+        )
         
         self.total_days = pre_flood_days + flood_days + post_flood_days
         self.pre_flood_days = pre_flood_days

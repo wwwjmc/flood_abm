@@ -103,7 +103,7 @@ class colorLegend(TextElement):
         return legend
 
 model_params = {
-    "N_persons": Slider("Number of persons", 300, 10, 1500, 10), #ini,min,max,stp
+    "N_persons": Slider("Number of persons", 300, 10, 1500, 10),
     "shelter_cap_limit": Slider("Shelter Capacity(% of pop.)", 1, 0, 10, 0.3),
     "healthcare_cap_limit": Slider("Healthcare Capacity(% of pop.)", 5, 0, 10, 1),
     "shelter_funding": Slider("Shelter funds $", 50000, 5000, 200000, 5000),
@@ -111,16 +111,17 @@ model_params = {
     "pre_flood_days": Slider("Pre Flood Days", 8, 0, 90, 1),
     "flood_days": Slider("Flood Days", 10, 3, 30, 1),
     "post_flood_days": Slider("Post Flood Days", 14, 0, 90, 1),
-    "houses_file": "../calgary_map_data/houses.zip",
-    "businesses_file": "../calgary_map_data/businesses.zip",
-    "schools_file": "../calgary_map_data/schools.zip",
-    "shelter_file": "../calgary_map_data/shelter.zip",
-    "healthcare_file": "../calgary_map_data/healthcare.zip",
-    "government_file": "../calgary_map_data/government.zip",
-    "flood_file_1": "../calgary_map_data/flood1.zip",
-    "flood_file_2": "../calgary_map_data/flood2.zip",
-    "flood_file_3": "../calgary_map_data/flood3.zip",
-    "model_crs": "EPSG:5070"
+
+    "houses_file": "../malolos_map_data/houses.zip",
+    "businesses_file": "../malolos_map_data/business.zip",
+    "schools_file": "../malolos_map_data/schools.zip",
+    "shelter_file": "../malolos_map_data/evacuation-centers.zip",
+    "healthcare_file": "../malolos_map_data/hospitals.zip",
+    "government_file": "../malolos_map_data/brgy-halls.zip",
+    "flood_file_1": "../malolos_map_data/flood1.zip",
+    "flood_file_2": "../malolos_map_data/flood2.zip",
+    "flood_file_3": "../malolos_map_data/flood3.zip",
+    "model_crs": "EPSG:32651"
 }
 
 # Create a canvas grid with given portrayal function and agent dimensions

@@ -16,17 +16,39 @@ import random
 import mesa_geo as mg
 import geopandas as gpd
 from shapely.geometry import Point, Polygon
+import pyproj
 
 class StudyArea(mg.GeoSpace):
-    def __init__(self, model, houses_file, businesses_file, schools_file, shelter_file, healthcare_file, government_file, crs) -> None:
+    def __init__(
+        self,
+        model,
+        houses_file,
+        businesses_file,
+        schools_file,
+        shelter_file,
+        healthcare_file,
+        government_file,
+        flood_file_1,
+        flood_file_2,
+        flood_file_3,
+        crs,
+    ) -> None:
         super().__init__(crs=crs)
-        
+
+        # force CRS to exist for older/incompatible mesa-geo builds
+        self._crs = pyproj.CRS.from_user_input(crs)
+
+        attributes = ["houses", "businesses", "schools", "healthcare", "shelter", "government", "flood_areas"]
+        for attr in attributes:
+            setattr(self, attr, [])
+
+        self.data_crs = "EPSG:4326"    
         # Initialize attributes
         attributes = ["houses", "businesses", "schools", "healthcare", "shelter", "government", "flood_areas"]
         for attr in attributes:
             setattr(self, attr, [])
         
-        self.data_crs = "EPSG:4269" # Input CRS used in QGIS
+        self.data_crs = "EPSG:4326" # Input CRS used in QGIS
         
         # Load different agent types using the generic function
         self._load_entity_agents_from_file(model, houses_file, FA.House_Agent, "houses", crs)
@@ -35,40 +57,40 @@ class StudyArea(mg.GeoSpace):
         self._load_entity_agents_from_file(model, shelter_file, FA.Shelter_Agent, "shelter", crs)
         self._load_entity_agents_from_file(model, healthcare_file, FA.Healthcare_Agent, "healthcare", crs)
         self._load_entity_agents_from_file(model, government_file, FA.Government_Agent, "government", crs)
+        self._load_flood_maps_from_file(model, flood_file_1, crs)
+        self._load_flood_maps_from_file(model, flood_file_2, crs)
+        self._load_flood_maps_from_file(model, flood_file_3, crs)
 
-    
 
     def _load_entity_agents_from_file(self, model, file_path, agent_class, attr_name, crs) -> None:
-        """
-        Generic function to load entity agents from a file and assign UUIDs to each agent.
-        
-        Parameters:
-        - model: The model instance to which agents belong.
-        - file_path: The path to the file containing geographic data.
-        - agent_class: The class of the agent to be created.
-        - attr_name: The name of the attribute to store the agents in.
-        - crs: The coordinate reference system to be used.
-        """
-        # Load and process data from the file
-        df = gpd.read_file(file_path).set_crs(self.data_crs, allow_override=True).to_crs(crs)
-        df = df[df.is_valid]  # Remove invalid geometries
+        df = gpd.read_file(file_path)
+
+        if df.crs is None:
+            df = df.set_crs(self.data_crs)
+
+        df = df.to_crs(crs)
+        df = df[df.geometry.notnull()]
+        df = df[df.is_valid]
+
+        print(f"{attr_name}: rows after cleaning = {len(df)}")
+
         df["centroid"] = list(zip(df.geometry.centroid.x, df.geometry.centroid.y))
-        
-        # Generate UUIDs for agents
-        df['unique_id'] = [str(uuid.uuid4()) for _ in range(len(df))]
-        
-        # Create agents from the GeoDataFrame with unique IDs
+        df["unique_id"] = [str(uuid.uuid4()) for _ in range(len(df))]
+
         agent_creator = mg.AgentCreator(agent_class, model=model, crs=crs)
         agents = agent_creator.from_GeoDataFrame(df, unique_id="unique_id")
-        
-        # Extend the relevant attribute with new agents
+
+        print(f"{attr_name}: agents created = {len(agents)}")
+
         getattr(self, attr_name).extend(agents)
+        print(f"{attr_name}: stored agents = {len(getattr(self, attr_name))}")
+
         self.add_agents(agents)
         
         
     def _load_flood_maps_from_file(self, model, flood_file, crs) -> None:
         # Load the GeoDataFrame with the appropriate CRS
-        flood_df = gpd.read_file(flood_file).set_crs(self.data_crs, allow_override=True).to_crs(crs)
+        flood_df = gpd.read_file(flood_file).to_crs(crs)
     
         # Remove invalid, empty, or null geometries
         flood_df = flood_df[flood_df.is_valid]
@@ -81,7 +103,7 @@ class StudyArea(mg.GeoSpace):
         # flood_df['id'] = range(1, len(flood_df) + 1)
     
         # Create FloodArea agents from the GeoDataFrame
-        flood_creator = mg.AgentCreator(FloodArea, model, crs)
+        flood_creator = mg.AgentCreator(FloodArea, model=model, crs=crs)
         flood_area = flood_creator.from_GeoDataFrame(flood_df)
     
         # Assign flood_file to each agent after creation
