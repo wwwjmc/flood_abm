@@ -12,6 +12,8 @@ Interactive visualization accessible via a web browser and data saved in
 
 import sys
 import os
+
+from matplotlib import legend
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
@@ -26,6 +28,7 @@ from mesa.visualization import Slider
 
 import warnings
 import psutil
+import xyzservices.providers as xyz
 
 # Suppress the specific FutureWarning
 warnings.filterwarnings("ignore", category=FutureWarning, module="seaborn")
@@ -39,7 +42,7 @@ def get_resource_usage():
 
 #========================== Launch to server observe ======================
 
-# Define portrayal dictionary for different agents
+#Polygon representation in map
 def agent_portrayal(agent):
     portrayal = {}
 
@@ -57,13 +60,25 @@ def agent_portrayal(agent):
             portrayal["color"] = "Orange"
             
     elif isinstance(agent, FloodArea):
-        portrayal["color"] = "Cyan"
+        if "flood1" in agent.flood_file:
+            portrayal["color"] = "Yellow" 
+
+        elif "flood2" in agent.flood_file:
+            portrayal["color"] = "Orange"
+
+        elif "flood3" in agent.flood_file:
+            portrayal["color"] = "Red"
+        
+        portrayal["weight"] = 0
+        portrayal["fillOpacity"] = 0.35
         
     elif isinstance(agent, FA.Business_Agent):
         portrayal["color"] = "Purple"
 
     elif isinstance(agent, FA.House_Agent):
-        portrayal["color"] = "Grey"
+        portrayal["color"] = "#7f8c8d"
+        portrayal["weight"] = 0.3
+        portrayal["fillOpacity"] = 0.6
     
     elif isinstance(agent, FA.School_Agent):
         portrayal["color"] = "Yellow"
@@ -85,21 +100,31 @@ class colorLegend(TextElement):
         pass
 
     def render(self, model):
-        # Define the legend content based on the agent portrayal colors and conditions
-        legend = "<div style='position: absolute; right: 50px; top: 150px; font-size: 17px;'>"
-        legend += "<strong>Legend:</strong><br>"
-        legend += "<span style='color: green;'>&#9679; Green: Person<br>"
-        legend += "<span style='color: red;'>&#9679; Red: Stranded Person<br>"
-        legend += "<span style='color: orange;'>&#9679; Orange: Health-compromised<br>"
-        legend += "<span style='color: black;'>&#9679; Deceased Person<br>"
-        legend += "<span style='color: purple;'>&#9679; Purple: Business<br>"
-        legend += "<span style='color: grey;'>&#9679; Yellow: School<br>"
-        legend += "<span style='color: brown;'>&#9679; Brown: House<br>"
-        legend += "<span style='color: magenta;'>&#9679; Magenta: Government<br>"
-        legend += "<span style='color: blue;'>&#9679; Blue: Shelter<br>"
-        legend += "<span style='color: orange;'>&#9679; Orange: Healthcare<br>"
-        legend += "<span style='color: cyan;'>&#9679; Cyan: Flood Inundation<br>"
-        legend += "</div>"      
+
+        legend = "<div style='padding:10px;font-size:14px;display:grid;"
+        legend += "grid-template-columns:repeat(4,auto);gap:6px 18px;align-items:center;'>"
+
+        legend += "<strong>Legend</strong><span></span><span></span>"
+
+        # Persons (circles)
+        legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:green;margin-right:6px;'></span>Person</span>"
+        legend += "<span><span style='display:inline-block;width:12px;height:12px;background:grey;border:1px solid #555;margin-right:6px;'></span>House</span>"
+        legend += "<span><span style='display:inline-block;width:12px;height:12px;background:orange;border:1px solid #555;margin-right:6px;'></span>Healthcare</span>"
+        legend += "<span><span style='display:inline-block;width:12px;height:12px;background:yellow;opacity:0.35;border:1px solid #555;margin-right:6px;'></span>Flood Low</span>"
+
+        legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:red;margin-right:6px;'></span>Stranded</span>"
+        legend += "<span><span style='display:inline-block;width:12px;height:12px;background:purple;border:1px solid #555;margin-right:6px;'></span>Business</span>"
+        legend += "<span><span style='display:inline-block;width:12px;height:12px;background:yellow;border:1px solid #555;margin-right:6px;'></span>School</span>"
+        legend += "<span><span style='display:inline-block;width:12px;height:12px;background:orange;opacity:0.35;border:1px solid #555;margin-right:6px;'></span>Flood Medium</span>"
+
+        legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:orange;margin-right:6px;'></span>Injured</span>"
+        legend += "<span><span style='display:inline-block;width:12px;height:12px;background:magenta;border:1px solid #555;margin-right:6px;'></span>Government</span>"
+        legend += "<span><span style='display:inline-block;width:12px;height:12px;background:blue;border:1px solid #555;margin-right:6px;'></span>Shelter</span>"
+        legend += "<span><span style='display:inline-block;width:12px;height:12px;background:red;opacity:0.35;border:1px solid #555;margin-right:6px;'></span>Flood High</span>"
+
+        legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:black;margin-right:6px;'></span>Deceased</span>"
+        legend += "<span><span style='display:inline-block;width:12px;height:12px;background:orange;border:1px solid #555;margin-right:6px;'></span>Healthcare</span>"
+        legend += "</div>"
         return legend
 
 model_params = {
@@ -125,8 +150,12 @@ model_params = {
 }
 
 # Create a canvas grid with given portrayal function and agent dimensions
-map_element = mg.visualization.MapModule(agent_portrayal, map_height=500, map_width=860)
-# map_element = MapModule(agent_portrayal, map_height=500, map_width=860)
+map_element = mg.visualization.MapModule(
+    agent_portrayal,
+    map_height=500,
+    map_width=860
+    # tiles=xyz.Esri.WorldImagery for satellite basemap
+)
 
 # Add the legend to the visualization
 legend = colorLegend()

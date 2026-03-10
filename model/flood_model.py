@@ -49,6 +49,14 @@ class FloodModel(Model):
             flood_file_3,
             model_crs
         )
+
+        print("houses loaded:", len(self.space.houses))
+        print("businesses loaded:", len(self.space.businesses))
+        print("schools loaded:", len(self.space.schools))
+        print("shelter loaded:", len(self.space.shelter))
+        print("healthcare loaded:", len(self.space.healthcare))
+        print("government loaded:", len(self.space.government))
+        print("flood areas loaded initially:", len(self.space.flood_areas))
         
         self.total_days = pre_flood_days + flood_days + post_flood_days
         self.pre_flood_days = pre_flood_days
