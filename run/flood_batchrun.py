@@ -48,7 +48,7 @@ print(f"Memory usage before batch run: {mem_before:.2f} MB")
 print(f"CPU usage before batch run: {cpu_before:.2f}%")
 
 batch_run_params = {
-    "N_persons": [500],
+    "N_persons": [100],
     "shelter_cap_limit": [1],
     "healthcare_cap_limit": [5],
     "shelter_funding": [50000],
@@ -56,19 +56,21 @@ batch_run_params = {
     "pre_flood_days": [14],
     "flood_days": [10],
     "post_flood_days": [14],
-    "houses_file": "../calgary_map_data/houses.zip",
-    "businesses_file": "../calgary_map_data/businesses.zip",
-    "schools_file": "../calgary_map_data/schools.zip",
-    "shelter_file": "../calgary_map_data/shelter.zip",
-    "healthcare_file": "../calgary_map_data/healthcare.zip",
-    "government_file": "../calgary_map_data/government.zip",
-    "flood_file_1": "../calgary_map_data/flood1.zip",
-    "flood_file_2": "../calgary_map_data/flood2.zip",
-    "flood_file_3": "../calgary_map_data/flood3.zip",
-    "model_crs": "EPSG:5070"
-    }
 
-num_iterations = 5
+    "houses_file": ["../malolos_map_data/houses.zip"],
+    "businesses_file": ["../malolos_map_data/business.zip"],
+    "schools_file": ["../malolos_map_data/schools.zip"],
+    "shelter_file": ["../malolos_map_data/evacuation-centers.zip"],
+    "healthcare_file": ["../malolos_map_data/hospitals.zip"],
+    "government_file": ["../malolos_map_data/brgy-halls.zip"],
+    "flood_file_1": ["../malolos_map_data/flood1.zip"],
+    "flood_file_2": ["../malolos_map_data/flood2.zip"],
+    "flood_file_3": ["../malolos_map_data/flood3.zip"],
+
+    "model_crs": ["EPSG:32651"]
+}
+
+num_iterations = 1
 
 # Create and run the batch
 results = batch_run(

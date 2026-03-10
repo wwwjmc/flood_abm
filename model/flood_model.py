@@ -107,21 +107,29 @@ class FloodModel(Model):
         self.total_gdp = self.business_gdp + self.school_gdp  + self.shelter_gdp + self.healthcare_gdp + self.government_gdp      
         
     #------------Initialize government agent-----------------------------------
-        self.government = self.space.government[0]
-        self.government.wealth = self.government_gdp
-        self.schedule.add(self.government)
+        self.government = self.space.government
+        for gov in self.government:
+            gov.wealth = self.government_gdp / len(self.government)
+            gov.tax_revenue = 0
+            self.schedule.add(gov)
+
             
     #------------Initialize shelter system agent------------------------------
-        self.shelter = self.space.shelter[0]
-        self.shelter.wealth = self.shelter_gdp 
-        self.shelter.capacity_limit = self.shelter_cap_limit
-        self.schedule.add(self.shelter)
+        self.shelter = self.space.shelter
+        for shelter in self.shelter:
+            shelter.wealth = self.shelter_gdp / len(self.shelter)
+            shelter.capacity_limit = self.shelter_cap_limit / len(self.shelter)
+            shelter.sheltered_agents = []
+            self.schedule.add(shelter)
+
                       
     #------------Initialize healthcare system agent------------------------------
-        self.healthcare = self.space.healthcare[0]
-        self.healthcare.wealth = self.healthcare_gdp 
-        self.healthcare.capacity_limit = self.healthcare_cap_limit
-        self.schedule.add(self.healthcare) 
+        self.healthcare = self.space.healthcare
+        for health in self.healthcare:
+            health.wealth = self.healthcare_gdp / len(self.healthcare)
+            health.capacity_limit = self.healthcare_cap_limit / len(self.healthcare)
+            health.hospitalized_agents = []
+            self.schedule.add(health)
     
     #---------Initialize businesses, schools and houses--------------------
         self._initialize_businesses()
@@ -216,17 +224,32 @@ class FloodModel(Model):
     #-------------Notify Shelter and get healthcare----------------------------
                        
     def notify_shelter(self, agent):
-        "Get sheltered"
-        if agent not in self.shelter.sheltered_agents and agent.time_stranded >= self.hours_before_rescue:
-            
-            if len(self.shelter.sheltered_agents) < self.shelter.capacity_limit:
-                self.shelter.sheltered_agents.append(agent)
-                                
-                shelter_position = self.get_random_point_in_polygon(self.shelter.geometry)
-                self.space.move_agent(agent, shelter_position)
-                
-                agent.stranded = False
-                agent.time_stranded = 0                               
+        "Send stranded person to nearest shelter"
+
+        if not agent.stranded or agent.time_stranded < self.hours_before_rescue:
+            return
+
+        # find nearest shelter with available capacity
+        available_shelters = [
+            s for s in self.shelters
+            if len(s.sheltered_agents) < s.capacity_limit
+        ]
+
+        if not available_shelters:
+            return
+
+        shelter = min(
+            available_shelters,
+            key=lambda s: s.geometry.distance(agent.geometry)
+        )
+
+        shelter.sheltered_agents.append(agent)
+
+        shelter_position = self.get_random_point_in_polygon(shelter.geometry)
+        self.space.move_agent(agent, shelter_position)
+
+        agent.stranded = False
+        agent.time_stranded = 0                              
     
     def get_random_point_in_polygon(self, polygon):
         """Generate a random point within a given polygon."""
@@ -237,9 +260,21 @@ class FloodModel(Model):
                 return random_point
                  
     def receive_healthcare(self, patient):
-        if len(self.healthcare.hospitalized_agents) < self.healthcare.capacity_limit:
-            if patient not in self.healthcare.hospitalized_agents:
-                self.healthcare.hospitalized_agents.append(patient)
-                
-                healthcare_position = self.get_random_point_in_polygon(self.healthcare.geometry)
-                self.space.move_agent(patient, healthcare_position)
+        available_hospitals = [
+            h for h in self.healthcare_facilities
+            if len(h.hospitalized_agents) < h.capacity_limit
+        ]
+
+        if not available_hospitals:
+            return
+
+        healthcare = min(
+            available_hospitals,
+            key=lambda h: h.geometry.distance(patient.geometry)
+        )
+
+        if patient not in healthcare.hospitalized_agents:
+            healthcare.hospitalized_agents.append(patient)
+
+            healthcare_position = self.get_random_point_in_polygon(healthcare.geometry)
+            self.space.move_agent(patient, healthcare_position)
