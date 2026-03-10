@@ -49,7 +49,7 @@ def agent_portrayal(agent):
     # Custom portrayal for specific conditions
     if isinstance(agent, FA.Person_Agent):
         portrayal["color"] = "Green"
-        portrayal["radius"] = "1"
+        portrayal["radius"] = "3"
         portrayal["fillOpacity"] = 1
         
         if agent.stranded:

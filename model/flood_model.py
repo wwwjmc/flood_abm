@@ -19,7 +19,6 @@ from mesa import Model
 from agents import person_agent_assign as psn_agnt
 
 from mesa.time import RandomActivation
-
 from data_collection import data_collect
 
 class FloodModel(Model):
@@ -134,9 +133,10 @@ class FloodModel(Model):
         self._initialize_houses()
         
     #-----------------Initialize person agents--------------------------------
-        psn_agnt.create_person_agents(self)
-        
-        data_collect.data_collection(self)      
+        psn_agnt.create_person_agents(self)  
+        data_collect.data_collection(self)
+        print("Persons created:", self.num_persons)
+        print("Total scheduled agents:", len(self.schedule.agents)) 
         
     #-------------------------------Step function------------------------------
     def step(self):

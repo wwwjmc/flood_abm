@@ -1,4 +1,5 @@
 import uuid
+from xml.parsers.expat import model
 from . import flood_agents as FA
 
 from scipy.stats import beta
@@ -237,6 +238,9 @@ def assign_persons_to_houses(model):
             resident.household = house
             resident.homeless = False
             model.space.move_agent(resident, resident.household.geometry)
+
+        print("Total houses:", len(model.space.houses))
+        print("Residents assigned:", sum(len(h.residents) for h in model.space.houses))
 
 
 def assign_persons_to_businesses(model):
