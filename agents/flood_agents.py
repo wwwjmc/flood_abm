@@ -126,7 +126,11 @@ class Person_Agent(GeoAgent):
         if self.alive:
             self.time_of_day = self.current_hour % 24  # Assuming a 24-hour model
             
-            if not (self.evacuated or self in self.model.shelter.sheltered_agents or self in self.model.healthcare.hospitalized_agents):
+            if not (
+                    self.evacuated
+                    or any(self in s.sheltered_agents for s in self.model.shelters)
+                    or any(self in h.hospitalized_agents for h in self.model.healthcare_facilities)
+                ):
                 if not self.stranded:                    
                     # Different actions based on time of day
                     if 0 <= self.time_of_day < 8:     # Resting at home
@@ -198,10 +202,12 @@ class Person_Agent(GeoAgent):
                         self.evacuated = False                            
                         self.model.space.add_agents(self)
                             
-                if self in self.model.shelter.sheltered_agents:
-                    if random.random() < 0.7:
-                        self.model.shelter.sheltered_agents.remove(self)
-                        
+                for shelter in self.model.shelters:
+                    if self in shelter.sheltered_agents:
+                        if random.random() < 0.7:
+                            shelter.sheltered_agents.remove(self)
+                        break
+                                        
                 if self.injured:
                     self.model.receive_healthcare(self)  
                     
@@ -338,13 +344,13 @@ class Person_Agent(GeoAgent):
             self.injured = True
             self.time_injured += 1 
         
-        self.model.notify_shelter(self)  # Notify the support system agent
-        
-        if self not in self.model.shelter.sheltered_agents:
+        self.model.notify_shelter(self)
+
+        if not any(self in shelter.sheltered_agents for shelter in self.model.shelters):
             if self.time_stranded > self.survivability_duration:
                 self.alive = False
                 self.stranded = False
-                self.injured = False 
+                self.injured = False
                 self.duringflood_coping_action_implemented = False
         
             
@@ -412,13 +418,20 @@ class Shelter_Agent(GeoAgent):
                 agent.time_in_shelter += 1
                 
                 if agent.injured:
-                    if len(self.model.healthcare.hospitalized_agents) < self.model.healthcare.capacity_limit and agent.time_injured >= self.model.hours_before_healthcare:
+                    available_healthcare = next(
+                        (
+                            facility for facility in self.model.healthcare_facilities
+                            if len(facility.hospitalized_agents) < facility.capacity_limit
+                        ),
+                        None
+                    )
+
+                    if available_healthcare and agent.time_injured >= self.model.hours_before_healthcare:
                         self.model.receive_healthcare(agent)
                         self.sheltered_agents.remove(agent)
-                        agent.time_in_shelter = 0
-                    
-                    if agent not in self.model.healthcare.hospitalized_agents:  # update time of injury if healthcare is full
-                        self.time_injured += 1
+
+                    if not any(agent in facility.hospitalized_agents for facility in self.model.healthcare_facilities):
+                        agent.time_injured += 1
             
             for agent in self.sheltered_agents:
                 if agent.time_in_shelter >= 12: # Agent attempts to go home after 12 hours in shelter

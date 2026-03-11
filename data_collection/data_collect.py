@@ -145,9 +145,9 @@ def count_agents_by_category(model, category, prefix, compute_func):
                 if prefix.lower() == "dead":
                     condition_matched = not agent.alive  # For dead, check if the agent is not alive
                 elif prefix.lower() == "sheltered":
-                    condition_matched = agent in model.shelter.sheltered_agents  # Check if sheltered
+                    condition_matched = any(agent in s.sheltered_agents for s in model.shelters)  # Check if sheltered
                 elif prefix.lower() == "hospitalized":
-                    condition_matched = agent in model.healthcare.hospitalized_agents  # Check if hospitalized
+                    condition_matched = any(agent in h.hospitalized_agents for h in model.healthcare_facilities)  # Check if hospitalized
                 else:
                     condition_matched = getattr(agent, f"{prefix.lower()}", False)  # Other conditions like evacuated, injured
 
@@ -226,12 +226,12 @@ def count_agents_by_total_population(model, category, prefix):
                 elif prefix.lower() == "injured":
                     condition_matched = agent.injured
                 elif prefix.lower() == "sheltered":
-                    condition_matched = agent in model.shelter.sheltered_agents
+                    condition_matched = any(agent in s.sheltered_agents for s in model.shelters)
                 elif prefix.lower() == "hospitalized":
-                    condition_matched = agent in model.healthcare.hospitalized_agents
+                    condition_matched = any(agent in h.hospitalized_agents for h in model.healthcare_facilities)
                 elif prefix.lower() == "dead":
                     condition_matched = not agent.alive
-                elif prefix.lower() == "evacuated":
+                elif prefix.lower() == "evacuated": 
                     condition_matched = agent.evacuated
                 else:
                     # Default to False if the condition doesn't match known prefixes
@@ -264,12 +264,10 @@ def compute_evacuated(model):
     return sum(1 for agent in model.schedule.agents if isinstance(agent, FA.Person_Agent) and agent.evacuated)
 
 def compute_hospitalized(model):
-    return sum(1 for agent in model.schedule.agents if isinstance(agent, FA.Person_Agent) and agent in 
-               [hospitalized_agent for hc_agent in model.schedule.agents if isinstance(hc_agent, FA.Healthcare_Agent) for hospitalized_agent in hc_agent.hospitalized_agents])
+    return sum(len(h.hospitalized_agents) for h in model.healthcare_facilities)
 
 def compute_sheltered(model):
-    return sum(1 for agent in model.schedule.agents if isinstance(agent, FA.Person_Agent) and agent in 
-               [sheltered_agent for ss_agent in model.schedule.agents if isinstance(ss_agent, FA.Shelter_Agent) for sheltered_agent in ss_agent.sheltered_agents])
+    return sum(len(s.sheltered_agents) for s in model.shelters)
 
 def compute_stranded(model):
     return sum(1 for agent in model.schedule.agents if isinstance(agent, FA.Person_Agent) and agent.stranded)
