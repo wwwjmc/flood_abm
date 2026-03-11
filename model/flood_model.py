@@ -107,9 +107,9 @@ class FloodModel(Model):
         self.total_gdp = self.business_gdp + self.school_gdp  + self.shelter_gdp + self.healthcare_gdp + self.government_gdp      
         
     #------------Initialize government agent-----------------------------------
-        self.government = self.space.government
-        for gov in self.government:
-            gov.wealth = self.government_gdp / len(self.government)
+        self.governments = self.space.government
+        for gov in self.governments:
+            gov.wealth = self.government_gdp / len(self.governments)
             gov.tax_revenue = 0
             self.schedule.add(gov)
 
@@ -133,11 +133,7 @@ class FloodModel(Model):
     
     #---------Initialize businesses, schools and houses--------------------
         self._initialize_businesses()
-
-        # Initialize schools
         self._initialize_schools()
-        
-        # Initialize houses
         self._initialize_houses()
         
     #-----------------Initialize person agents--------------------------------

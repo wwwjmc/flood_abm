@@ -356,10 +356,14 @@ class Person_Agent(GeoAgent):
             
     def pay_taxes(self):
         """Calculates and pays taxes to the government."""
-        tax_rate = random.uniform(0, 0.07)  # Set the tax rate (adjust as needed)
+        tax_rate = random.uniform(0, 0.07)
         tax_amount = self.income * tax_rate
-        self.model.government.wealth += tax_amount
-        self.income -= tax_amount      
+
+        amount_per_government = tax_amount / len(self.model.governments)
+        for government in self.model.governments:
+            government.wealth += amount_per_government
+
+        self.income -= tax_amount     
         
 
 
@@ -532,7 +536,9 @@ class Healthcare_Agent(GeoAgent):
         # Function for paying taxes
         tax_rate = random.uniform(0, 0.05)  # Set the tax rate (adjust as needed)
         tax_amount = self.wealth * tax_rate
-        self.model.government.wealth += tax_amount
+        amount_per_government = tax_amount / len(self.model.governments)
+        for government in self.model.governments:
+            government.wealth += amount_per_government
         self.wealth -= tax_amount
             
     def __repr__(self) -> str:
@@ -605,10 +611,13 @@ class Business_Agent(GeoAgent):
         """
         Calculate and pay taxes to the government.
         """
-        
         tax_rate = random.uniform(0, 0.05)
         tax_amount = self.wealth * tax_rate
-        self.model.government.wealth += tax_amount
+
+        amount_per_government = tax_amount / len(self.model.governments)
+        for government in self.model.governments:
+            government.wealth += amount_per_government
+
         self.wealth -= tax_amount
 
     def __repr__(self) -> str:
@@ -803,15 +812,19 @@ class Government_Agent(GeoAgent):
         self.school_contribution = random.uniform(0.04, 0.2) * self.model.school_gdp            # VALUE UPDATED #
         
         #healthcare_amount = self.wealth * self.healthcare_contribution
-        
+
         # Distribute wealth to the shelter system
-        self.model.shelter.wealth += self.shelter_contribution
+        shelter_amount = self.shelter_contribution / len(self.model.shelters)
+        for shelter in self.model.shelters:
+            shelter.wealth += shelter_amount
         self.wealth -= self.shelter_contribution
-        
+
         # Distribute wealth to the healthcare system
-        self.model.healthcare.wealth += self.healthcare_contribution
+        healthcare_amount = self.healthcare_contribution / len(self.model.healthcare_facilities)
+        for facility in self.model.healthcare_facilities:
+            facility.wealth += healthcare_amount
         self.wealth -= self.healthcare_contribution
-               
+
         # Distribute wealth to schools
         amount = self.school_contribution / self.model.num_schools
         for school in self.model.space.schools:
