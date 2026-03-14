@@ -10,23 +10,26 @@ economic activities, rescue operations, and shelter systems.
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 import random
-from shapely.geometry import Point
 
+from shapely.geometry import Point
 from space.flood_space import StudyArea
 from mesa import Model
 from agents import person_agent_assign as psn_agnt
-
 from mesa.time import RandomActivation
 from data_collection import data_collect
 
+
+# FloodModel inherits from Mesa’s Model class. So it becomes a Mesa-compatible simulation model.
 class FloodModel(Model):
     """
     The Model Class defines the environment and interaction rules for the flood simulation. 
     It manages the grid-based environment, schedules agent actions, tracks time progression, 
     and monitors the effects of flooding on agents, their behaviors, and economic activities.
     """
+
+    # Constructor that runs as the model is created. It initializes the environment, creates agents, 
+    # and sets up the schedule and data collection.
     def __init__(self, N_persons,
                  shelter_cap_limit, healthcare_cap_limit, shelter_funding, healthcare_funding, pre_flood_days, flood_days, post_flood_days, 
                  houses_file, businesses_file, schools_file, shelter_file, healthcare_file, government_file,
@@ -34,7 +37,8 @@ class FloodModel(Model):
         super().__init__()
         
         self.crs = model_crs
-    
+
+        # Creation of Spatial Environment
         self.space = StudyArea(
             self,
             houses_file,
@@ -49,6 +53,7 @@ class FloodModel(Model):
             model_crs
         )
 
+        # Print loaded agent counts for verification
         print("houses loaded:", len(self.space.houses))
         print("businesses loaded:", len(self.space.businesses))
         print("schools loaded:", len(self.space.schools))
@@ -57,6 +62,7 @@ class FloodModel(Model):
         print("government loaded:", len(self.space.government))
         print("flood areas loaded initially:", len(self.space.flood_areas))
         
+        # Simulation time settings and flood file reference
         self.total_days = pre_flood_days + flood_days + post_flood_days
         self.pre_flood_days = pre_flood_days
         self.flood_days = flood_days
@@ -64,40 +70,46 @@ class FloodModel(Model):
         self.flood_file_2 = flood_file_2
         self.flood_file_3 = flood_file_3
         
-        # Calculate times for flood maps
-        self.disaster_period = None
+        # Initialize disaster period to None, will be set in step function based on time progression
+        self.disaster_period = None     # Will later store values like 'pre_flood_evac_period', 'during_flood', 'post_flood'
         
-        self.evacuation_time = (self.pre_flood_days - 7) * 24
-        self.last_evacuation_time = self.pre_flood_days * 24
+        # Evacuation and rescue timing settings
+        self.evacuation_time = (self.pre_flood_days - 7) * 24       # Evacuation starts 7 days before flood, converted to hours
+        self.last_evacuation_time = self.pre_flood_days * 24        # Last evacuation time is at the end of the pre-flood period, converted to hours
+        self.hours_before_rescue = 2                                # Time threshold for stranded agents to be rescued by shelter system, in hours
+        self.hours_before_healthcare = 0                            # Time threshold for injured agents to receive healthcare, in hours
         
-        self.hours_before_rescue = 2
-        self.hours_before_healthcare = 0
+        # Calculate flood map addition and removal times based on the flood duration and evacuation timing
+        # Flood maps will be added at regular intervals during the flood period and removed after a certain time 
+        # SIMULATE CHANGING FLOOD EXTENT
         
         flood_interval = (self.flood_days * 24) // 6
         self.flood_map_add_times = [
-            self.last_evacuation_time + 1,
-            self.last_evacuation_time + 1 + flood_interval,
-            self.last_evacuation_time + 1 + 2 * flood_interval
+            self.last_evacuation_time + 1,                          # First flood map added right after evacuation ends
+            self.last_evacuation_time + 1 + flood_interval,         # Second flood map added after a third of the flood duration
+            self.last_evacuation_time + 1 + 2 * flood_interval      # Third flood map added after two-thirds of the flood duration
         ]
         self.flood_map_remove_times = [
-            self.flood_map_add_times[0] + 3 * flood_interval,
-            self.flood_map_add_times[1] + 3 * flood_interval,
-            self.flood_map_add_times[2] + 3 * flood_interval
+            self.flood_map_add_times[0] + 3 * flood_interval,       # First flood map removed after three intervals (halfway through the flood period)
+            self.flood_map_add_times[1] + 3 * flood_interval,       # Second flood map removed after three intervals (towards the end of the flood period)
+            self.flood_map_add_times[2] + 3 * flood_interval        # Third flood map removed after three intervals (after the flood period ends)
         ]
         
-        self.perc_education_people = 0.89     
-        self.schedule = RandomActivation(self)
+        self.perc_education_people = 0.89                           # Percentage of people who attend school, used to determine how many person agents will be assigned to schools
+        self.schedule = RandomActivation(self)                      # Scheduler that activates agents in random order each step, ensuring a more realistic simulation of interactions and behaviors
         
+        # Agent and Infrastructure Count
         self.num_persons = N_persons
-        
         self.num_houses = len(self.space.houses)
         self.num_businesses = len(self.space.businesses)
         self.num_schools = len(self.space.schools)
         
+        # Calculate shelter and healthcare capacity limits based on the total population and specified percentage limits
+        # Percentage capacity to actual capacity
         self.shelter_cap_limit = shelter_cap_limit/100 * self.num_persons
         self.healthcare_cap_limit = healthcare_cap_limit/100 * self.num_persons
         
-        # Share total gdp among population, businesses and government
+        # TO BE MODIFIED - GDP CALCULATIONS BASED ON ACTUAL DATA !!!!
         self.business_gdp = (self.num_persons * 22000)/365 * 14 #* self.total_days
         self.school_gdp = (self.num_persons * 1200)/365 * 14 #* self.total_days
         self.shelter_gdp = (self.num_persons * 4200)/365 * 14 #* self.total_days
@@ -107,13 +119,13 @@ class FloodModel(Model):
         self.total_gdp = self.business_gdp + self.school_gdp  + self.shelter_gdp + self.healthcare_gdp + self.government_gdp      
         
     #------------Initialize government agent-----------------------------------
-        self.governments = self.space.government
+        self.governments = self.space.government 
         for gov in self.governments:
-            gov.wealth = self.government_gdp / len(self.governments)
+            gov.wealth = self.government_gdp / len(self.governments)     
             gov.tax_revenue = 0
             self.schedule.add(gov)
-
-            
+    
+    # TO MODIFY - ASSIGN DIFFERENT VALUES BASED ON LOCATION, SIZE, OR OTHER FACTORS.
     #------------Initialize shelter system agent------------------------------
         self.shelters = self.space.shelter
         for shelter in self.shelters:
@@ -121,8 +133,10 @@ class FloodModel(Model):
             shelter.capacity_limit = self.shelter_cap_limit / len(self.shelters)
             shelter.sheltered_agents = []
             self.schedule.add(shelter)
+        # Assumes all shelters are equally capable, which is simple but not always realistic.   
+        # Assign different capacities and resources to each shelter based on their size, location, or funding.
 
-                      
+    # TO MODIFY - ASSIGN DIFFERENT VALUES BASED ON LOCATION, SIZE, OR OTHER FACTORS.              
     #------------Initialize healthcare system agent------------------------------
         self.healthcare_facilities = self.space.healthcare
         for health in self.healthcare_facilities:
@@ -130,6 +144,8 @@ class FloodModel(Model):
             health.capacity_limit = self.healthcare_cap_limit / len(self.healthcare_facilities)
             health.hospitalized_agents = []
             self.schedule.add(health)
+        # Assumes all healthcare facilities are equally capable, which is simple but not always realistic.
+        # Assign different capacities and resources to each healthcare facility based on their size, location, or funding.
     
     #---------Initialize businesses, schools and houses--------------------
         self._initialize_businesses()
@@ -137,14 +153,27 @@ class FloodModel(Model):
         self._initialize_houses()
         
     #-----------------Initialize person agents--------------------------------
-        psn_agnt.create_person_agents(self)  
+        # Create person agents in the model with demographics, wealth classes, and other attributes based on the number of 
+        # persons specified and assign them to schools, workplaces, and homes.
+        # From person_agent_assign
+        psn_agnt.create_person_agents(self)
+
+        # Collect initial data on the model state before the simulation starts, such as the number of agents, their attributes, and the initial flood conditions.
+        # From data_collect.py
         data_collect.data_collection(self)
         print("Persons created:", self.num_persons)
         print("Total scheduled agents:", len(self.schedule.agents)) 
         
+        
     #-------------------------------Step function------------------------------
+    # The step function defines the actions that occur at each time step of the simulation. 
+    # It updates the disaster period based on the current time, 
+    # handles the addition and removal of flood maps to simulate changing flood conditions, 
+    # activates all agents according to the schedule, collects data, and saves the results to a CSV file for analysis.
+    
     def step(self):
-        # Baseline, Pre, During. Post flood periods        
+        
+        # Determine Disaster Period: Baseline, Pre, During. Post flood periods        
         if self.evacuation_time <= self.schedule.time <= self.last_evacuation_time:
             self.disaster_period = 'pre_flood_evac_period'
         if self.last_evacuation_time < self.schedule.time < (self.pre_flood_days + self.flood_days) * 24:
@@ -168,10 +197,15 @@ class FloodModel(Model):
         elif self.schedule.time == self.flood_map_remove_times[2]:
             self.remove_flood_maps(self.flood_file_1)
     
-        self.datacollector.collect(self)
+        # Activate all agents in the schedule, allowing them to perform their actions based on their defined behaviors and the current state of the environment.
         self.schedule.step()
+        self.datacollector.collect(self)
     
-        # Define the path to the 'data_collection' folder
+
+        # TO MODIFY!!!
+        # Save the collected data to a CSV file after each step, allowing for analysis of the simulation results over time. 
+        # The data is saved in a 'data_collection' folder
+        # This allows for tracking changes in agent attributes, behaviors, and flood conditions throughout the simulation.
         data_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data_collection"))
         os.makedirs(data_folder, exist_ok=True)  # Ensure the folder exists
         
@@ -188,6 +222,18 @@ class FloodModel(Model):
 
     def remove_flood_maps(self, flood_file):  # remove flood areas as were added
         self.space.remove_flood_maps(flood_file)
+
+    def save_results(self, filename="serverrun_results.csv"):
+        data_folder = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "data_collection")
+        )
+        os.makedirs(data_folder, exist_ok=True)
+
+        file_path = os.path.join(data_folder, filename)
+        data = self.datacollector.get_model_vars_dataframe()
+        data.to_csv(file_path, index=False)
+
+        print(f"Results saved to: {file_path}")
 
     #-------------------------Initialize businesses----------------------------
     
@@ -221,54 +267,70 @@ class FloodModel(Model):
                        
     def notify_shelter(self, agent):
         "Send stranded person to nearest shelter"
-
+        
+        # Only notify if the agent is stranded and has been stranded for at least the specified hours before rescue. 
+        # This prevents immediate evacuation of agents who just became stranded, allowing for a more realistic response time from the shelter system.
         if not agent.stranded or agent.time_stranded < self.hours_before_rescue:
             return
 
-        # find nearest shelter with available capacity
+        # Find available shelters that have not reached their capacity limit. 
+        # This ensures that only shelters with available space are considered for evacuation.
         available_shelters = [
             s for s in self.shelters
             if len(s.sheltered_agents) < s.capacity_limit
         ]
 
+        # If no shelters are available, the agent cannot be evacuated and will remain stranded until a shelter becomes available or the situation changes.
         if not available_shelters:
             return
 
+        #TO MODIFY: Straight-line distance is used here for simplicity, 
+        # but in a real-world scenario, you would want to consider the actual road network and accessibility, 
+        # especially during a flood when certain routes may be impassable.
+        # Find the nearest available shelter to the stranded agent using spatial distance calculations.
         shelter = min(
             available_shelters,
             key=lambda s: s.geometry.distance(agent.geometry)
         )
 
+        # Evacuate the agent to the shelter by adding them to the shelter's list of sheltered agents 
+        # and moving their position to a random point within the shelter's geometry.
         shelter.sheltered_agents.append(agent)
-
         shelter_position = self.get_random_point_in_polygon(shelter.geometry)
         self.space.move_agent(agent, shelter_position)
 
+        # After evacuation, reset the agent's stranded status and time stranded to reflect that they have been rescued and are no longer in immediate danger.
         agent.stranded = False
         agent.time_stranded = 0                              
     
+    # Repeatedly generates random points inside the polygon’s bounding box until one falls inside the polygon.
     def get_random_point_in_polygon(self, polygon):
         """Generate a random point within a given polygon."""
         min_x, min_y, max_x, max_y = polygon.bounds
         while True:
-            random_point = Point(random.uniform(min_x, max_x), random.uniform(min_y, max_y))
+            random_point = Point(random.uniform(min_x, max_x), 
+                                 random.uniform(min_y, max_y))
             if polygon.contains(random_point):
                 return random_point
-                 
+    
     def receive_healthcare(self, patient):
+        # Only provide healthcare if the patient is injured and has been injured for at least the specified hours before healthcare.
         available_hospitals = [
             h for h in self.healthcare_facilities
-            if len(h.hospitalized_agents) < h.capacity_limit
+            if len(h.hospitalized_agents) < h.capacity_limit and patient.injured and patient.time_injured >= self.hours_before_healthcare
         ]
 
         if not available_hospitals:
             return
 
+        # Find the nearest available healthcare facility to the injured agent using spatial distance calculations.
         healthcare = min(
             available_hospitals,
             key=lambda h: h.geometry.distance(patient.geometry)
         )
 
+        # Provide healthcare to the patient by adding them to the healthcare facility's list of hospitalized agents 
+        # and moving their position to a random point within the healthcare facility's geometry.
         if patient not in healthcare.hospitalized_agents:
             healthcare.hospitalized_agents.append(patient)
 

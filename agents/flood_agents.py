@@ -418,9 +418,9 @@ class Shelter_Agent(GeoAgent):
                 else:
                     chosen_business.wealth -= shelter_cost * random.uniform(1, 20)
             
-            for agent in self.sheltered_agents:  # if agent is injured and in shelter get him healthcare
+            for agent in list(self.sheltered_agents):
                 agent.time_in_shelter += 1
-                
+
                 if agent.injured:
                     available_healthcare = next(
                         (
@@ -436,9 +436,9 @@ class Shelter_Agent(GeoAgent):
 
                     if not any(agent in facility.hospitalized_agents for facility in self.model.healthcare_facilities):
                         agent.time_injured += 1
-            
-            for agent in self.sheltered_agents:
-                if agent.time_in_shelter >= 12: # Agent attempts to go home after 12 hours in shelter
+
+            for agent in list(self.sheltered_agents):
+                if agent.time_in_shelter >= 12:
                     if not agent.household.flooded:
                         self.sheltered_agents.remove(agent)
         
@@ -492,10 +492,10 @@ class Healthcare_Agent(GeoAgent):
                
             self.num_hospitalized_patients = len(self.hospitalized_agents)  # Update the count of injured patients          
             
-            for agent in self.hospitalized_agents:
+            for patient in list(self.hospitalized_agents):
                 healthcare_cost_per_person = random.uniform(0,3500)  # Cost for the support system  # VALUE UPDATED #
-                if isinstance(agent, Person_Agent):
-                    agent.income -= healthcare_cost_per_person  # Agent spends some money for their care
+                if isinstance(patient, Person_Agent):
+                    patient.income -= healthcare_cost_per_person  # Agent spends some money for their care
                     self.wealth -= healthcare_cost_per_person * random.uniform(0,0.4)   # healthcare gets some profit from agen  # VALUE UPDATED #
                     
                     businesses = [bizagent for bizagent in self.model.schedule.agents if isinstance(bizagent, Business_Agent)]                    
@@ -506,7 +506,7 @@ class Healthcare_Agent(GeoAgent):
                     else:
                         chosen_business.wealth -= healthcare_cost_per_person * random.gauss(1,20)
                     
-            for patient in  self.hospitalized_agents:
+            for patient in list(self.hospitalized_agents):
                 self.continued_healthcare(patient)
         
         self.current_hour += 1  # Increment the current hour
@@ -516,21 +516,22 @@ class Healthcare_Agent(GeoAgent):
             pass
 
     def continued_healthcare(self, patient):
-            average_recovery_rate = 0.9
-            
-            if patient.recovery_rate <= average_recovery_rate:
+        average_recovery_rate = 0.9
+
+        if patient.recovery_rate >= average_recovery_rate:
+            self.hospitalized_agents.remove(patient)
+            patient.injured = False
+            patient.time_injured = 0
+        else:
+            patient.time_injured += 1
+
+        if patient.time_injured >= patient.survivability_duration:
+            patient.alive = False
+            patient.injured = False
+            if patient in self.hospitalized_agents:
                 self.hospitalized_agents.remove(patient)
-                patient.injured = False
-                patient.time_injured = 0
-            else:
-                patient.time_injured += 1
-            
-            if patient.time_injured >= patient.survivability_duration:
-                patient.alive = False
-                patient.injured = False
-                self.hospitalized_agents.remove(patient)    
-                patient.preflood_non_evacuation_measure_implemented = False
-                patient.postflood_adaptation_measures_planned = False
+            patient.preflood_non_evacuation_measure_implemented = False
+            patient.postflood_adaptation_measures_planned = False
     
     def pay_taxes(self):
         # Function for paying taxes
