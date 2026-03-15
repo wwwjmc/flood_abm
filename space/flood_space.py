@@ -19,6 +19,8 @@ from shapely.geometry import Point, Polygon
 import pyproj
 
 class StudyArea(mg.GeoSpace):
+    # Initialize the StudyArea with geospatial data and create agents
+    # This is where to add agents
     def __init__(
         self,
         model,
@@ -32,25 +34,28 @@ class StudyArea(mg.GeoSpace):
         flood_file_2,
         flood_file_3,
         crs,
-    ) -> None:
-        super().__init__(crs=crs)
+    ) -> None: 
+        super().__init__(crs=crs) 
 
-        # force CRS to exist for older/incompatible mesa-geo builds
+        # Create empty lists for each layer
+        # Force CRS to exist for older/incompatible mesa-geo builds
         self._crs = pyproj.CRS.from_user_input(crs)
 
+        # Each one will later store the agents created from GIS files.
         attributes = ["houses", "businesses", "schools", "healthcare", "shelter", "government", "flood_areas"]
         for attr in attributes:
             setattr(self, attr, [])
 
         self.data_crs = "EPSG:4326"    
-        # Initialize attributes
+        
+        # Initialize attributes for each layer to store agents
         attributes = ["houses", "businesses", "schools", "healthcare", "shelter", "government", "flood_areas"]
         for attr in attributes:
             setattr(self, attr, [])
         
         self.data_crs = "EPSG:4326" # Input CRS used in QGIS
         
-        # Load different agent types using the generic function
+        # Load all spatial files agents from GIS files and convert to model CRS
         self._load_entity_agents_from_file(model, houses_file, FA.House_Agent, "houses", crs)
         self._load_entity_agents_from_file(model, businesses_file, FA.Business_Agent, "businesses", crs)
         self._load_entity_agents_from_file(model, schools_file, FA.School_Agent, "schools", crs)
@@ -62,32 +67,38 @@ class StudyArea(mg.GeoSpace):
         self._load_flood_maps_from_file(model, flood_file_3, crs)
 
 
+    # Helper method to load agents from GIS files, clean data, and convert to model CRS
     def _load_entity_agents_from_file(self, model, file_path, agent_class, attr_name, crs) -> None:
+        # loads the shapefile/GeoJSON into a GeoDataFrame.
         df = gpd.read_file(file_path)
 
+        # Check if the GeoDataFrame has a CRS, and if not, set it to the expected data CRS
         if df.crs is None:
             df = df.set_crs(self.data_crs)
 
-        df = df.to_crs(crs)
-        df = df[df.geometry.notnull()]
-        df = df[df.is_valid]
-
+        df = df.to_crs(crs)                 # All layers are converted into the same coordinate system used by the model
+        df = df[df.geometry.notnull()]      # Remove rows with null geometries
+        df = df[df.is_valid]                # Remove rows with invalid geometries
         print(f"{attr_name}: rows after cleaning = {len(df)}")
 
-        df["centroid"] = list(zip(df.geometry.centroid.x, df.geometry.centroid.y))
+        # Create centroid and unique IDs for each feature to use as agent attributes
+        df["centroid"] = list(zip(df.geometry.centroid.x, df.geometry.centroid.y))  
         df["unique_id"] = [str(uuid.uuid4()) for _ in range(len(df))]
 
+        # Create agents from the GeoDataFrame using Mesa-Geo's AgentCreator
+        # Convert GIS rows into agents (House Polygons become House_Agents, etc.) and store them in the corresponding attribute list
         agent_creator = mg.AgentCreator(agent_class, model=model, crs=crs)
         agents = agent_creator.from_GeoDataFrame(df, unique_id="unique_id")
-
         print(f"{attr_name}: agents created = {len(agents)}")
 
+        # Store the created agents in the corresponding attribute list (e.g., self.houses, self.businesses, etc.)
+        # Using extend to add agents to the existing list, ensuring that if this method is called multiple times, it will accumulate agents rather than overwrite them.
         getattr(self, attr_name).extend(agents)
         print(f"{attr_name}: stored agents = {len(getattr(self, attr_name))}")
-
         self.add_agents(agents)
-        
-        
+
+
+    # Helper method to load flood maps, clean data, convert to model CRS, and create FloodArea agents
     def _load_flood_maps_from_file(self, model, flood_file, crs) -> None:
         # Load the GeoDataFrame with the appropriate CRS
         flood_df = gpd.read_file(flood_file).to_crs(crs)
@@ -95,8 +106,8 @@ class StudyArea(mg.GeoSpace):
         # Remove invalid, empty, or null geometries
         flood_df = flood_df[flood_df.is_valid]
         
-        # Merge all features into one single polygon
-        merged_polygon = flood_df.unary_union
+        # Merge all flood polygons into a single geometry to create one FloodArea agent per file
+        merged_polygon = flood_df.union_all()
         flood_df = gpd.GeoDataFrame(geometry=[merged_polygon], crs=crs)
     
         # Assign unique IDs to each feature
@@ -113,12 +124,9 @@ class StudyArea(mg.GeoSpace):
         # Add the agents to the space and extend the flood_areas list
         self.add_agents(flood_area)
         self.flood_areas.extend(flood_area)
-    
-        # print(f"Number of flood areas added to the model: {len(flood_area)}")
+        print(f"Number of flood areas added to the model: {len(flood_area)}")
 
 
-
-            
     def remove_flood_maps(self, flood_file: str) -> None:
         # Find agents that match the flood_file
         agents_to_remove = [agent for agent in self.flood_areas if agent.flood_file == flood_file]
@@ -128,7 +136,8 @@ class StudyArea(mg.GeoSpace):
             self.remove_agent(agent)
             self.flood_areas.remove(agent)
 
-
+    # Iterates through all flood areas and checks if the given position is contained within any of them. 
+    # If it is, it returns a random flood height between 10 and 55. If the position is not within any flood area, it returns 0.
     def get_flood_height_at_position(self, position):
         """
         Check if the given position is within any flood area and return a random flood height if it is.
@@ -143,8 +152,13 @@ class StudyArea(mg.GeoSpace):
             if flood_area.geometry.contains(position):
                 return random.uniform(10, 55)
         return 0.0
+    # This is a simplified representation of flood depth. It does not read actual flood depth values from the map.
+    # flooded = random height
+    # not flooded = zero
     
-    
+    # Allows agents to move to a new position by updating their geometry attribute. 
+    # It checks if the new position is a Point or Polygon and uses the centroid for movement. 
+    # If the new position is an object with a geometry attribute, it also uses the centroid of that geometry. 
     def move_agent(self, agent, new_position):
         """
         Move the agent to a new position.
@@ -153,14 +167,13 @@ class StudyArea(mg.GeoSpace):
         agent: The agent to move.
         new_position: A geometry object or an object with a geometry attribute.
         """
-        if isinstance(new_position, (Point, Polygon)):
-            new_pos = new_position.centroid
-        elif hasattr(new_position, 'geometry'):
-            new_pos = new_position.geometry.centroid
-        else:
+        if isinstance(new_position, (Point, Polygon)):  # Check if new_position is a Point or Polygon
+            new_pos = new_position.centroid             # Use the centroid for movement
+        elif hasattr(new_position, 'geometry'):         # Check if new_position has a geometry attribute
+            new_pos = new_position.geometry.centroid    
+        else:                                           # If new_position is neither a Point/Polygon nor has a geometry attribute, raise an error
             raise ValueError("new_position must be a Point, Polygon, or an object with a geometry attribute.")
-        
-        agent.geometry = Point(new_pos.x, new_pos.y)
+        agent.geometry = Point(new_pos.x, new_pos.y)    # Update the agent's geometry to the new position (as a Point)
         
 
 class FloodArea(mg.GeoAgent):
