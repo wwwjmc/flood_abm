@@ -46,7 +46,7 @@ def get_resource_usage():
 def agent_portrayal(agent):
     portrayal = {}
 
-    # Custom portrayal for specific conditions
+    # Portrayal for person agents based on their status (stranded, injured, deceased)
     if isinstance(agent, FA.Person_Agent):
         portrayal["color"] = "Green"
         portrayal["radius"] = "3"
@@ -58,25 +58,36 @@ def agent_portrayal(agent):
             portrayal["color"] = "Black"
         elif agent.injured:
             portrayal["color"] = "Orange"
-            
+
+    # Portayal for flood areas based on severity        
     elif isinstance(agent, FloodArea):
-        if "flood1" in agent.flood_file:
-            portrayal["color"] = "Yellow" 
-
-        elif "flood2" in agent.flood_file:
+        print("Rendering FloodArea:", agent.var_value, agent.flood_file)
+        if agent.var_value == 1:
+            portrayal["color"] = "Yellow"
+            portrayal["fillColor"] = "Yellow"
+        elif agent.var_value == 2:
             portrayal["color"] = "Orange"
-
-        elif "flood3" in agent.flood_file:
+            portrayal["fillColor"] = "Orange"
+        elif agent.var_value == 3:
             portrayal["color"] = "Red"
-        
-        portrayal["weight"] = 0
+            portrayal["fillColor"] = "Red"
+        else:  # var_value == 0 or unknown
+            portrayal["color"] = "#95253400"
+            portrayal["fillColor"] = "#95253400"
+            portrayal["weight"] = 0
+            portrayal["fillOpacity"] = 0   # fully invisible
+            portrayal["opacity"] = 0       # hide border too
+
+        portrayal["weight"] = 1
         portrayal["fillOpacity"] = 0.35
-        
+        portrayal["opacity"] = 0.6
+
+    # Portrayal for other entities    
     elif isinstance(agent, FA.Business_Agent):
         portrayal["color"] = "Purple"
 
     elif isinstance(agent, FA.House_Agent):
-        portrayal["color"] = "#7f8c8d"
+        portrayal["color"] = "#952534"
         portrayal["weight"] = 0.3
         portrayal["fillOpacity"] = 0.6
     
@@ -91,7 +102,7 @@ def agent_portrayal(agent):
     
     elif isinstance(agent, FA.Government_Agent):
         portrayal["color"] = "Magenta"   
-    
+
     return portrayal
 
 

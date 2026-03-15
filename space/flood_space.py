@@ -15,7 +15,6 @@ from shapely.geometry import Point, Polygon, MultiPolygon
 import agents.flood_agents as FA
 import mesa_geo as mg
 import geopandas as gpd
-from shapely.geometry import Point, Polygon
 import pyproj
 
 class StudyArea(mg.GeoSpace):
@@ -40,13 +39,6 @@ class StudyArea(mg.GeoSpace):
         # Create empty lists for each layer
         # Force CRS to exist for older/incompatible mesa-geo builds
         self._crs = pyproj.CRS.from_user_input(crs)
-
-        # Each one will later store the agents created from GIS files.
-        attributes = ["houses", "businesses", "schools", "healthcare", "shelter", "government", "flood_areas"]
-        for attr in attributes:
-            setattr(self, attr, [])
-
-        self.data_crs = "EPSG:4326"    
         
         # Initialize attributes for each layer to store agents
         attributes = ["houses", "businesses", "schools", "healthcare", "shelter", "government", "flood_areas"]
@@ -90,6 +82,9 @@ class StudyArea(mg.GeoSpace):
         self.flood_file_1 = flood_file_1
         self.flood_file_2 = flood_file_2
         self.flood_file_3 = flood_file_3
+        self._load_flood_maps_from_file(model, flood_file_1, crs)
+        self._load_flood_maps_from_file(model, flood_file_2, crs)
+        self._load_flood_maps_from_file(model, flood_file_3, crs)
 
 
     # Helper method to prepare geospatial data before creating agents
@@ -184,7 +179,8 @@ class StudyArea(mg.GeoSpace):
         # Assign flood_file and derived flood severity attributes to each agent after creation
         for i, agent in enumerate(flood_areas):
             agent.flood_file = flood_file
-            agent.var_value = self._safe_var_to_int(flood_df.iloc[i][var_field])
+            agent._actual_var_value = self._safe_var_to_int(flood_df.iloc[i][var_field])
+            agent.var_value = 0 # Default to 0 for non-flooded areas, will be updated to actual Var value if flooded
             agent.severity_class = flood_df.iloc[i]["severity_class"]
             agent.flood_depth = flood_df.iloc[i]["flood_depth"]
             agent.severity_score = flood_df.iloc[i]["severity_score"]
@@ -363,6 +359,7 @@ class FloodArea(mg.GeoAgent):
         super().__init__(unique_id, model, geometry, crs)
         self.flood_file = flood_file            # Assign the flood_file attribute
         self.var_value = var_value              # Store the original hazard Var value
+        self._actual_var_value = var_value  # Store the original Var value for reference, even if var_value is later updated to 0 for non-flooded areas
         self.severity_class = severity_class    # Store the interpreted flood severity class
         self.flood_depth = flood_depth          # Store the representative flood depth in meters
         self.severity_score = severity_score    # Store numeric severity rank for comparisons

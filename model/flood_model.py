@@ -70,8 +70,7 @@ class FloodModel(Model):
         self.flood_file_2 = flood_file_2
         self.flood_file_3 = flood_file_3
         
-        # Initialize disaster period to None, will be set in step function based on time progression
-        self.disaster_period = None     # Will later store values like 'pre_flood_evac_period', 'during_flood', 'post_flood'
+        self.disaster_period = "baseline"                           # Will later store values like 'pre_flood_evac_period', 'during_flood', 'post_flood'
         
         # Evacuation and rescue timing settings
         self.evacuation_time = (self.pre_flood_days - 7) * 24       # Evacuation starts 7 days before flood, converted to hours
@@ -79,22 +78,10 @@ class FloodModel(Model):
         self.hours_before_rescue = 2                                # Time threshold for stranded agents to be rescued by shelter system, in hours
         self.hours_before_healthcare = 0                            # Time threshold for injured agents to receive healthcare, in hours
         
-        # Calculate flood map addition and removal times based on the flood duration and evacuation timing
-        # Flood maps will be added at regular intervals during the flood period and removed after a certain time 
-        # SIMULATE CHANGING FLOOD EXTENT
-        
-        flood_interval = (self.flood_days * 24) // 6
-        self.flood_map_add_times = [
-            self.last_evacuation_time + 1,                          # First flood map added right after evacuation ends
-            self.last_evacuation_time + 1 + flood_interval,         # Second flood map added after a third of the flood duration
-            self.last_evacuation_time + 1 + 2 * flood_interval      # Third flood map added after two-thirds of the flood duration
-        ]
-        self.flood_map_remove_times = [
-            self.flood_map_add_times[0] + 3 * flood_interval,       # First flood map removed after three intervals (halfway through the flood period)
-            self.flood_map_add_times[1] + 3 * flood_interval,       # Second flood map removed after three intervals (towards the end of the flood period)
-            self.flood_map_add_times[2] + 3 * flood_interval        # Third flood map removed after three intervals (after the flood period ends)
-        ]
-        
+        # Track whether flood layers are currently active in the space
+        self.flood_layers_active = False
+        self.loaded_flood_files = set()
+
         self.perc_education_people = 0.89                           # Percentage of people who attend school, used to determine how many person agents will be assigned to schools
         self.schedule = RandomActivation(self)                      # Scheduler that activates agents in random order each step, ensuring a more realistic simulation of interactions and behaviors
         
@@ -172,31 +159,35 @@ class FloodModel(Model):
     # activates all agents according to the schedule, collects data, and saves the results to a CSV file for analysis.
     
     def step(self):
-        
-        # Determine Disaster Period: Baseline, Pre, During. Post flood periods        
-        if self.evacuation_time <= self.schedule.time <= self.last_evacuation_time:
-            self.disaster_period = 'pre_flood_evac_period'
-        if self.last_evacuation_time < self.schedule.time < (self.pre_flood_days + self.flood_days) * 24:
-            self.disaster_period = 'during_flood'
-        if self.schedule.time >= (self.pre_flood_days + self.flood_days) * 24:                
-            self.disaster_period = 'post_flood'
-        
-        # Handle flood map addition
-        if self.schedule.time == self.flood_map_add_times[0]:
+        # Update disaster period based on current time and defined thresholds for evacuation and flood duration. 
+        # This allows the model to simulate different phases of the flood event,
+        current_time = self.schedule.time
+        flood_start_time = self.last_evacuation_time + 1
+        flood_end_time = (self.pre_flood_days + self.flood_days) * 24
+
+        # Determine the current disaster period based on the defined time thresholds for evacuation and flood duration.
+        if self.evacuation_time <= current_time <= self.last_evacuation_time:
+            self.disaster_period = "pre_flood_evac_period"
+        elif flood_start_time <= current_time < flood_end_time:
+            self.disaster_period = "during_flood"
+        elif current_time >= flood_end_time:
+            self.disaster_period = "post_flood"
+        else:
+            self.disaster_period = "baseline"
+
+        # Handle flood map addition and removal based on the current disaster period.
+        if self.disaster_period == "during_flood" and not self.flood_layers_active:
             self.add_flood_maps(self.flood_file_1)
-        elif self.schedule.time == self.flood_map_add_times[1]:
             self.add_flood_maps(self.flood_file_2)
-        elif self.schedule.time == self.flood_map_add_times[2]:
             self.add_flood_maps(self.flood_file_3)
-        
-        # Handle flood map removal
-        if self.schedule.time == self.flood_map_remove_times[0]:
-            self.remove_flood_maps(self.flood_file_3)         
-        elif self.schedule.time == self.flood_map_remove_times[1]:
-            self.remove_flood_maps(self.flood_file_2)
-        elif self.schedule.time == self.flood_map_remove_times[2]:
+            self.flood_layers_active = True
+
+        if self.disaster_period == "post_flood" and self.flood_layers_active:
             self.remove_flood_maps(self.flood_file_1)
-    
+            self.remove_flood_maps(self.flood_file_2)
+            self.remove_flood_maps(self.flood_file_3)
+            self.flood_layers_active = False
+        
         # Activate all agents in the schedule, allowing them to perform their actions based on their defined behaviors and the current state of the environment.
         self.schedule.step()
         self.datacollector.collect(self)
@@ -216,12 +207,15 @@ class FloodModel(Model):
         data = self.datacollector.get_model_vars_dataframe()
         data.to_csv(file_path, index=False)
         
-    
     def add_flood_maps(self, flood_file):
-        self.space._load_flood_maps_from_file(self, flood_file, self.crs)
+        for agent in self.space.flood_areas:
+            if agent.flood_file == flood_file:
+                agent.var_value = agent._actual_var_value  # reveal actual severity
 
-    def remove_flood_maps(self, flood_file):  # remove flood areas as were added
-        self.space.remove_flood_maps(flood_file)
+    def remove_flood_maps(self, flood_file):
+        for agent in self.space.flood_areas:
+            if agent.flood_file == flood_file:
+                agent.var_value = 0  # hide again
 
     def save_results(self, filename="serverrun_results.csv"):
         data_folder = os.path.abspath(
