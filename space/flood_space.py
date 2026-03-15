@@ -11,8 +11,8 @@ This class is designed for flexible and reusable flood simulation models with ge
 """
 
 import uuid
+from shapely.geometry import Point, Polygon, MultiPolygon
 import agents.flood_agents as FA
-import random
 import mesa_geo as mg
 import geopandas as gpd
 from shapely.geometry import Point, Polygon
@@ -54,6 +54,31 @@ class StudyArea(mg.GeoSpace):
             setattr(self, attr, [])
         
         self.data_crs = "EPSG:4326" # Input CRS used in QGIS
+
+        # Define mappings for Project NOAH / hazard class values
+        # 1 = Low hazard (0-0.5 meters)
+        # 2 = Medium hazard (>0.5-1.5 meters)
+        # 3 = High hazard (>1.5 meters)
+        self.var_to_severity_class = {
+            1: "low",
+            2: "moderate",
+            3: "high",
+        }
+
+        # Representative flood depth values in meters for each hazard class
+        # These are proxy values, not exact raster depths
+        self.var_to_flood_depth = {
+            1: 0.25,
+            2: 1.00,
+            3: 2.00,
+        }
+
+        # Numeric ranking for comparing overlapping flood polygons
+        self.var_to_severity_score = {
+            1: 1,
+            2: 2,
+            3: 3,
+        }
         
         # Load all spatial files agents from GIS files and convert to model CRS
         self._load_entity_agents_from_file(model, houses_file, FA.House_Agent, "houses", crs)
@@ -62,13 +87,14 @@ class StudyArea(mg.GeoSpace):
         self._load_entity_agents_from_file(model, shelter_file, FA.Shelter_Agent, "shelter", crs)
         self._load_entity_agents_from_file(model, healthcare_file, FA.Healthcare_Agent, "healthcare", crs)
         self._load_entity_agents_from_file(model, government_file, FA.Government_Agent, "government", crs)
-        self._load_flood_maps_from_file(model, flood_file_1, crs)
-        self._load_flood_maps_from_file(model, flood_file_2, crs)
-        self._load_flood_maps_from_file(model, flood_file_3, crs)
+        self.flood_file_1 = flood_file_1
+        self.flood_file_2 = flood_file_2
+        self.flood_file_3 = flood_file_3
 
 
-    # Helper method to load agents from GIS files, clean data, and convert to model CRS
-    def _load_entity_agents_from_file(self, model, file_path, agent_class, attr_name, crs) -> None:
+    # Helper method to prepare geospatial data before creating agents
+    # This avoids repeating the same cleaning logic across entity layers and flood layers
+    def _read_and_prepare_geodata(self, file_path, crs):
         # loads the shapefile/GeoJSON into a GeoDataFrame.
         df = gpd.read_file(file_path)
 
@@ -76,13 +102,44 @@ class StudyArea(mg.GeoSpace):
         if df.crs is None:
             df = df.set_crs(self.data_crs)
 
-        df = df.to_crs(crs)                 # All layers are converted into the same coordinate system used by the model
-        df = df[df.geometry.notnull()]      # Remove rows with null geometries
-        df = df[df.is_valid]                # Remove rows with invalid geometries
+        # Remove rows with null, empty, or invalid geometries before projection
+        df = df[df.geometry.notnull()]
+        df = df[~df.geometry.is_empty]
+        df = df[df.is_valid]
+
+        # Raise a clear error if the layer becomes empty after cleaning
+        if df.empty:
+            raise ValueError(f"No valid geometries found in file: {file_path}")
+
+        # All layers are converted into the same coordinate system used by the model
+        df = df.to_crs(crs)
+        return df
+
+    def _safe_var_to_int(self, value):
+        try:
+            return int(float(value))
+        except (TypeError, ValueError):
+            return None
+
+    def _map_var_to_severity_class(self, var_value):
+        var_int = self._safe_var_to_int(var_value)
+        return self.var_to_severity_class.get(var_int, "none")
+
+    def _map_var_to_flood_depth(self, var_value):
+        var_int = self._safe_var_to_int(var_value)
+        return self.var_to_flood_depth.get(var_int, 0.0)
+
+    def _map_var_to_severity_score(self, var_value):
+        var_int = self._safe_var_to_int(var_value)
+        return self.var_to_severity_score.get(var_int, 0)
+
+    # Helper method to load agents from GIS files, clean data, and convert to model CRS
+    def _load_entity_agents_from_file(self, model, file_path, agent_class, attr_name, crs) -> None:
+        df = self._read_and_prepare_geodata(file_path, crs)
         print(f"{attr_name}: rows after cleaning = {len(df)}")
 
         # Create centroid and unique IDs for each feature to use as agent attributes
-        df["centroid"] = list(zip(df.geometry.centroid.x, df.geometry.centroid.y))  
+        df["centroid"] = list(zip(df.geometry.centroid.x, df.geometry.centroid.y))
         df["unique_id"] = [str(uuid.uuid4()) for _ in range(len(df))]
 
         # Create agents from the GeoDataFrame using Mesa-Geo's AgentCreator
@@ -100,31 +157,42 @@ class StudyArea(mg.GeoSpace):
 
     # Helper method to load flood maps, clean data, convert to model CRS, and create FloodArea agents
     def _load_flood_maps_from_file(self, model, flood_file, crs) -> None:
-        # Load the GeoDataFrame with the appropriate CRS
-        flood_df = gpd.read_file(flood_file).to_crs(crs)
-    
-        # Remove invalid, empty, or null geometries
-        flood_df = flood_df[flood_df.is_valid]
-        
-        # Merge all flood polygons into a single geometry to create one FloodArea agent per file
-        merged_polygon = flood_df.union_all()
-        flood_df = gpd.GeoDataFrame(geometry=[merged_polygon], crs=crs)
-    
-        # Assign unique IDs to each feature
-        # flood_df['id'] = range(1, len(flood_df) + 1)
-    
+        flood_df = self._read_and_prepare_geodata(flood_file, crs)
+
+        # Find the hazard classification field in the flood layer
+        # Project NOAH data commonly uses 'Var', but this also checks lowercase variants
+        possible_var_fields = ["Var", "var"]
+        var_field = next((field for field in possible_var_fields if field in flood_df.columns), None)
+
+        # Raise an error if the flood hazard layer does not contain the expected Var field
+        if var_field is None:
+            raise ValueError(f"Flood file '{flood_file}' does not contain a 'Var' field for hazard classification.")
+
+        # Keep flood polygons as separate features instead of merging them into one geometry
+        # This preserves the Var value of each feature so severity classes can be assigned correctly
+        flood_df["unique_id"] = [str(uuid.uuid4()) for _ in range(len(flood_df))]
+
+        # Convert Var to flood severity information
+        flood_df["severity_class"] = flood_df[var_field].apply(self._map_var_to_severity_class)
+        flood_df["flood_depth"] = flood_df[var_field].apply(self._map_var_to_flood_depth)
+        flood_df["severity_score"] = flood_df[var_field].apply(self._map_var_to_severity_score)
+
         # Create FloodArea agents from the GeoDataFrame
         flood_creator = mg.AgentCreator(FloodArea, model=model, crs=crs)
-        flood_area = flood_creator.from_GeoDataFrame(flood_df)
-    
-        # Assign flood_file to each agent after creation
-        for agent in flood_area:
+        flood_areas = flood_creator.from_GeoDataFrame(flood_df, unique_id="unique_id")
+
+        # Assign flood_file and derived flood severity attributes to each agent after creation
+        for i, agent in enumerate(flood_areas):
             agent.flood_file = flood_file
-    
+            agent.var_value = self._safe_var_to_int(flood_df.iloc[i][var_field])
+            agent.severity_class = flood_df.iloc[i]["severity_class"]
+            agent.flood_depth = flood_df.iloc[i]["flood_depth"]
+            agent.severity_score = flood_df.iloc[i]["severity_score"]
+
         # Add the agents to the space and extend the flood_areas list
-        self.add_agents(flood_area)
-        self.flood_areas.extend(flood_area)
-        print(f"Number of flood areas added to the model: {len(flood_area)}")
+        self.add_agents(flood_areas)
+        self.flood_areas.extend(flood_areas)
+        print(f"Number of flood areas added to the model from {flood_file}: {len(flood_areas)}")
 
 
     def remove_flood_maps(self, flood_file: str) -> None:
@@ -135,49 +203,166 @@ class StudyArea(mg.GeoSpace):
         for agent in agents_to_remove:
             self.remove_agent(agent)
             self.flood_areas.remove(agent)
+        
+        # Rebuild the flood_areas list without the removed agents
+        self.flood_areas = [agent for agent in self.flood_areas if agent.flood_file != flood_file]
+    
+    def _normalize_to_point(self, position):
+        """
+        Convert a supported geometry input into a Point for spatial flood checks.
 
-    # Iterates through all flood areas and checks if the given position is contained within any of them. 
-    # If it is, it returns a random flood height between 10 and 55. If the position is not within any flood area, it returns 0.
+        Supported inputs:
+        - shapely Point
+        - shapely Polygon
+        - shapely MultiPolygon
+        - object with a geometry attribute
+        """
+        if isinstance(position, Point):
+            return position
+        elif isinstance(position, (Polygon, MultiPolygon)):
+            return position.centroid
+        elif hasattr(position, "geometry") and position.geometry is not None:
+            geom = position.geometry
+            if isinstance(geom, Point):
+                return geom
+            elif isinstance(geom, (Polygon, MultiPolygon)):
+                return geom.centroid
+
+        raise TypeError(
+            "position must be a shapely.geometry.Point, Polygon, MultiPolygon, "
+            "or an object with a geometry attribute."
+        )
+
+
+    # Iterates through all flood areas and checks if the given position is contained within any of them.
+    # If it is, it returns the representative flood depth based on the highest Var severity value found at that location.
+    # If the position is not within any flood area, it returns 0.
     def get_flood_height_at_position(self, position):
         """
-        Check if the given position is within any flood area and return a random flood height if it is.
-        
+        Check if the given position is within any flood area and return a representative flood depth if it is.
+
         Parameters:
-        position (shapely.geometry.Point): The position to check.
-        
+        position: A shapely Point, Polygon, MultiPolygon, or an object with a geometry attribute.
+
         Returns:
         float: The flood height at the position, or 0 if the position is not flooded.
         """
+        position_point = self._normalize_to_point(position)
+
+        matched_flood_areas = []
+
         for flood_area in self.flood_areas:
-            if flood_area.geometry.contains(position):
-                return random.uniform(10, 55)
-        return 0.0
-    # This is a simplified representation of flood depth. It does not read actual flood depth values from the map.
-    # flooded = random height
-    # not flooded = zero
+            # covers() is used instead of contains() so points on polygon boundaries are also treated as flooded
+            if flood_area.geometry.covers(position_point):
+                matched_flood_areas.append(flood_area)
+
+        # If no flood area covers the position, return 0
+        if not matched_flood_areas:
+            return 0.0
+
+        # If multiple flood polygons overlap, return the flood depth from the highest severity score
+        highest_flood_area = max(matched_flood_areas, key=lambda fa: fa.severity_score)
+        return highest_flood_area.flood_depth
+
     
+    # Returns the flood severity class at a given position using the highest overlapping severity class
+    def get_flood_severity_at_position(self, position):
+        """
+        Check if the given position is within any flood area and return the flood severity class.
+
+        Parameters:
+        position: A shapely Point, Polygon, MultiPolygon, or an object with a geometry attribute.
+
+        Returns:
+        str: The flood severity class at the position, or 'none' if the position is not flooded.
+        """
+        position_point = self._normalize_to_point(position)
+
+        matched_flood_areas = []
+
+        for flood_area in self.flood_areas:
+            if flood_area.geometry.covers(position_point):
+                matched_flood_areas.append(flood_area)
+
+        if not matched_flood_areas:
+            return "none"
+
+        highest_flood_area = max(matched_flood_areas, key=lambda fa: fa.severity_score)
+        return highest_flood_area.severity_class
+    
+    # Returns the numeric hazard Var value at a given position using the highest overlapping severity
+    def get_flood_var_at_position(self, position):
+        """
+        Check if the given position is within any flood area and return the hazard Var value.
+
+        Parameters:
+        position: A shapely Point, Polygon, MultiPolygon, or an object with a geometry attribute.
+
+        Returns:
+        int: The hazard Var value at the position, or 0 if the position is not flooded.
+        """
+        position_point = self._normalize_to_point(position)
+
+        matched_flood_areas = []
+
+        for flood_area in self.flood_areas:
+            if flood_area.geometry.covers(position_point):
+                matched_flood_areas.append(flood_area)
+
+        if not matched_flood_areas:
+            return 0
+
+        highest_flood_area = max(matched_flood_areas, key=lambda fa: fa.severity_score)
+        return highest_flood_area.var_value if highest_flood_area.var_value is not None else 0
+        # This now uses actual flood severity values derived from the Var field of the hazard layer.
+        # flooded = representative depth based on Var
+        # not flooded = zero
+    
+
     # Allows agents to move to a new position by updating their geometry attribute. 
     # It checks if the new position is a Point or Polygon and uses the centroid for movement. 
     # If the new position is an object with a geometry attribute, it also uses the centroid of that geometry. 
+    
     def move_agent(self, agent, new_position):
         """
         Move the agent to a new position.
-        
+
         Parameters:
         agent: The agent to move.
         new_position: A geometry object or an object with a geometry attribute.
         """
-        if isinstance(new_position, (Point, Polygon)):  # Check if new_position is a Point or Polygon
-            new_pos = new_position.centroid             # Use the centroid for movement
-        elif hasattr(new_position, 'geometry'):         # Check if new_position has a geometry attribute
-            new_pos = new_position.geometry.centroid    
-        else:                                           # If new_position is neither a Point/Polygon nor has a geometry attribute, raise an error
-            raise ValueError("new_position must be a Point, Polygon, or an object with a geometry attribute.")
-        agent.geometry = Point(new_pos.x, new_pos.y)    # Update the agent's geometry to the new position (as a Point)
-        
+        if isinstance(new_position, Point):  # Check if new_position is a Point
+            new_pos = new_position
+        elif isinstance(new_position, (Polygon, MultiPolygon)):  # Check if new_position is a Polygon or MultiPolygon
+            new_pos = new_position.centroid  # Use the centroid for movement
+        elif hasattr(new_position, 'geometry') and new_position.geometry is not None:  # Check if new_position has a geometry attribute
+            if isinstance(new_position.geometry, Point):
+                new_pos = new_position.geometry
+            else:
+                new_pos = new_position.geometry.centroid
+        else:  # If new_position is neither a supported geometry nor has a geometry attribute, raise an error
+            raise ValueError("new_position must be a Point, Polygon, MultiPolygon, or an object with a geometry attribute.")
 
+        agent.geometry = Point(new_pos.x, new_pos.y)  # Update the agent's geometry to the new position (as a Point)
+    
+    
+# FloodArea agent class to represent flood polygons with severity attributes derived from the Var field of the hazard layer.
 class FloodArea(mg.GeoAgent):
-    def __init__(self, unique_id, model, geometry, crs, flood_file=None):
+    def __init__(
+        self,
+        unique_id,
+        model,
+        geometry,
+        crs,
+        flood_file=None,
+        var_value=None,
+        severity_class="none",
+        flood_depth=0.0,
+        severity_score=0,
+    ):
         super().__init__(unique_id, model, geometry, crs)
-        self.flood_file = flood_file  # Assign the flood_file attribute
-        # Initialize other necessary attributes
+        self.flood_file = flood_file            # Assign the flood_file attribute
+        self.var_value = var_value              # Store the original hazard Var value
+        self.severity_class = severity_class    # Store the interpreted flood severity class
+        self.flood_depth = flood_depth          # Store the representative flood depth in meters
+        self.severity_score = severity_score    # Store numeric severity rank for comparisons
