@@ -9,6 +9,8 @@ economic activities, rescue operations, and shelter systems.
 """
 import sys
 import os
+
+from shapely import geometry
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import random
 
@@ -228,19 +230,42 @@ class FloodModel(Model):
         data.to_csv(file_path, index=False)
 
         print(f"Results saved to: {file_path}")
+    
+    def _get_physical_resilience_from_hazard(self, geometry, agent_type="generic"):
+        hazard_var = self.space.get_flood_var_at_position(geometry)
+
+        base_map = {
+            0: 2.5,  # no hazard
+            1: 1.5,  # low
+            2: 0.9,  # moderate
+            3: 0.3   # high
+        }
+
+        base_value = base_map.get(hazard_var, 1.0)
+
+        type_adjustment = {
+            "person": 0.0,
+            "house": 0.2,
+            "business": 0.3,
+            "school": 0.4,
+            "shelter": 0.8,
+            "healthcare": 0.8,
+            "government": 0.8,
+        }
+        return max(0.1, base_value + type_adjustment.get(agent_type, 0.0))
 
     #-------------------------Initialize businesses----------------------------
-    
     def _initialize_businesses(self):
         avg_business_wealth = self.business_gdp / self.num_businesses    
         
         for business in self.space.businesses:
             business.wealth = avg_business_wealth
-        
+            business.physical_resilience = self._get_physical_resilience_from_hazard(
+                business.geometry, agent_type="business"
+            )
             self.schedule.add(business)
 
     #---------------------------Initialize schools-----------------------------
-    
     def _initialize_schools(self):
         # School GDP share
         avg_school_wealth = self.school_gdp / self.num_schools
@@ -248,13 +273,19 @@ class FloodModel(Model):
         # Assign all types to each school and distribute GDP
         for school in self.space.schools:
             school.wealth = avg_school_wealth
-            
-            # Add school agent to the schedule
-            self.schedule.add(school)
+            school.physical_resilience = self._get_physical_resilience_from_hazard(
+                school.geometry, agent_type="school"
+            )
+        # Add school agent to the schedule
+        self.schedule.add(school)
 
+     #---------------------------Initialize Houses-----------------------------
     def _initialize_houses(self):
         # Assign random resilience to houses
         for house in self.space.houses:
+            house.physical_resilience = self._get_physical_resilience_from_hazard(
+                house.geometry, agent_type="house"
+            )
             self.schedule.add(house)    
     
     #-------------Notify Shelter and get healthcare----------------------------

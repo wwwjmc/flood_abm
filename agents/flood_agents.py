@@ -71,8 +71,10 @@ class Person_Agent(GeoAgent):
         self.injured = False
         
         # Time and state attributes
-        self.current_hour = 0            
-        self.resilience = random.uniform(5, 15)  # Flood risk perception 
+        self.current_hour = 0      
+        
+        # TO MODIFY BASED ON FLOOD CLASSIFICATION      
+        self.physical_resilience = None
         self.stranded = False
         self.time_stranded = 0
         self.time_injured = 0
@@ -311,7 +313,7 @@ class Person_Agent(GeoAgent):
     
         # Filter out unsafe moves based on flood resilience
         safe_moves = [move for move in possible_moves
-                      if self.resilience > self.model.space.get_flood_height_at_position(move)]
+              if self.physical_resilience > self.model.space.get_flood_height_at_position(move)]
     
         if not safe_moves:
             self.stranded_behavior()
@@ -578,7 +580,7 @@ class Business_Agent(GeoAgent):
         self.wealth = None  # Share of the GDP attributed to the business
         self.type = None  # Type of business
         self.employees = []  # List to store employed individuals
-        self.resilience = random.uniform(15, 25)  # Measure of the business's resilience to flooding
+        self.physical_resilience = None
         self.current_hour = 0  # Initialize the current hour
         self.flooded = False  # Flag indicating if the business is flooded due to flooding
         self.time_flooded = 0  # Time since the business became flooded
@@ -594,7 +596,7 @@ class Business_Agent(GeoAgent):
         business_flood_height = self.model.space.get_flood_height_at_position(self.geometry)
 
         # Check if the business is flooded based on its resilience compared to flood height
-        if self.resilience < business_flood_height:
+        if self.physical_resilience < business_flood_height:
             self.flooded = True
             self.time_flooded += 1
         else:
@@ -656,7 +658,7 @@ class House_Agent(GeoAgent):
         """
         # self.wealth_class = wealth_class  # Adding economy_class attribute
         self.residents = []  # List to store residents
-        self.resilience = random.uniform(10, 30)  # Measure of the house's resilience to flooding
+        self.physical_resilience = None
         self.current_hour = 0  # Initialize the current hour
         self.flooded = False  # Flag indicating if the house is flooded due to flooding
         self.time_flooded = 0  # Time since the house became flooded
@@ -671,7 +673,7 @@ class House_Agent(GeoAgent):
         # print(flood_height)
 
         # Check if the house is flooded based on its resilience compared to flood height
-        if self.resilience < flood_height:
+        if self.physical_resilience < flood_height:
             self.flooded = True
             self.time_flooded += 1
         else:
@@ -719,7 +721,7 @@ class School_Agent(GeoAgent):
         self.wealth = None  # Share of the GDP attributed to the school
         self.types = None  # Type of school
         self.students = []  # List to store enrolled students
-        self.resilience = random.uniform(15, 25)  # Measure of the school's resilience to flooding
+        self.physical_resilience = None
         self.current_hour = 0  # Initialize the current hour
         self.flooded = False  # Flag indicating if the school is flooded due to flooding
         self.time_flooded = 0  # Time since the school became flooded
@@ -735,7 +737,7 @@ class School_Agent(GeoAgent):
         school_flood_height = self.model.space.get_flood_height_at_position(self.geometry)
 
         # Check if the school is flooded based on its resilience compared to flood height
-        if self.resilience < school_flood_height:
+        if self.physical_resilience < school_flood_height:
             self.flooded = True
             self.time_flooded += 1
         else:

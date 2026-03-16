@@ -134,12 +134,12 @@ def assign_wealth(model, i, person):
 
 def assign_SES_index(model, agent):   # High value represents high vulnerability
     # Age vulnerability
-    if agent.age in [0,14]:
+    if 0 <= agent.age <= 14:
         age_vul = 0.9
-    elif agent.age in [15-64]:
+    elif 15 <= agent.age <= 64:
         age_vul = 0.3
     else:
-        age_vul = 1
+        age_vul = 1.0
         
     # Education vulnerability 
     edu_vul = (1-0.8*agent.education)
@@ -214,10 +214,16 @@ def assign_persons_to_houses(model):
             # Assign one adult resident to the house if available
             if adults_available:
                 adult_resident = adults_available.pop(0)
+                if adult_resident in persons_copy:
+                    persons_copy.remove(adult_resident)
+
                 house.residents.append(adult_resident)
                 adult_resident.household = house
                 adult_resident.homeless = False
-                # print(adult_resident.household.geometry)
+                adult_resident.physical_resilience = model._get_physical_resilience_from_hazard(
+                    adult_resident.household.geometry,
+                    agent_type="person"
+                )
                 model.space.move_agent(adult_resident, adult_resident.household.geometry)
                 num_residents -= 1
 
@@ -228,6 +234,10 @@ def assign_persons_to_houses(model):
                     house.residents.append(resident)
                     resident.household = house
                     resident.homeless = False
+                    resident.physical_resilience = model._get_physical_resilience_from_hazard(
+                        resident.household.geometry,
+                        agent_type="person"
+                    )
                     model.space.move_agent(resident, resident.household.geometry)
 
         # Handle any remaining persons
@@ -237,6 +247,10 @@ def assign_persons_to_houses(model):
             house.residents.append(resident)
             resident.household = house
             resident.homeless = False
+            resident.physical_resilience = model._get_physical_resilience_from_hazard(
+                resident.household.geometry,
+                agent_type="person"
+            )
             model.space.move_agent(resident, resident.household.geometry)
 
         print("Total houses:", len(model.space.houses))
