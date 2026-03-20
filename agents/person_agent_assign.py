@@ -34,17 +34,6 @@ def create_person_agents(model):
     )
     random.shuffle(model.wealth_classes)
 
-#    model.num_indigenous_persons = int(0.05 * model.num_persons)
-#    model.num_immigrant_persons = int(0.23 * model.num_persons)
-#    model.num_canadian_persons = model.num_persons - model.num_indigenous_persons - model.num_immigrant_persons
-
-#    ethnicity_groups = (
-#        ["Indigenous"] * model.num_indigenous_persons +
-#        ["Immigrant"] * model.num_immigrant_persons +
-#        ["Canadian"] * model.num_canadian_persons
-#    )
-#    random.shuffle(ethnicity_groups)
-
     model.num_working_class_persons = 0
     model.num_age_0_14_persons = 0
     model.num_age_15_64_persons = 0
@@ -52,7 +41,12 @@ def create_person_agents(model):
     model.num_male_persons = 0
     model.num_female_persons = 0
 
-    model.persons_by_wealth_class = {wealth_class: [] for wealth_class in model.wealth_classes}
+    model.persons_by_wealth_class = {
+        "Upper_Class": [],
+        "Upper_Middle_Class": [],
+        "Middle_Class": [],
+        "Lower_Class": []
+    }
 
     for i in range(model.num_persons):
         unique_id = uuid.uuid4().int
@@ -61,7 +55,6 @@ def create_person_agents(model):
         assign_age(model, i, person)
         assign_wealth(model, i, person)
         assign_mobility(model, person)
-#        person.ethnicity = ethnicity_groups[i]
         assign_education(model, person)
         assign_gender(model, person)
         
@@ -129,7 +122,7 @@ def assign_wealth(model, i, person):
         person.income = random.uniform(0, 24000)/365 * 14 
     
     model.persons_gdp += person.income
-    model.total_gdp += model.persons_gdp
+    model.total_gdp += person.income
 
 
 def assign_SES_index(model, agent):   # High value represents high vulnerability
@@ -149,14 +142,6 @@ def assign_SES_index(model, agent):   # High value represents high vulnerability
         gen_vul = 0.3
     else:
         gen_vul = 1
-
-#    # Ethnicity vulnerability
-#    if agent.ethnicity == "Canadian":
-#        eth_vul = 0.1
-#    elif agent.ethnicity == "Immigrant":
-#        eth_vul = 0.8
-#    else:
-#        eth_vul = 1
     
     # Wealth status vulnerability
     if agent.wealth_class == "Upper_Class":
@@ -168,8 +153,8 @@ def assign_SES_index(model, agent):   # High value represents high vulnerability
     else: 
         wth_vul = 1
 
-    agent.SES_1 = (age_vul + edu_vul + gen_vul + wth_vul )/5
-    agent.SES_2 = (age_vul * edu_vul * gen_vul * wth_vul )**(1/5) 
+    agent.SES_1 = (age_vul + edu_vul + gen_vul + wth_vul )/4
+    agent.SES_2 = (age_vul * edu_vul * gen_vul * wth_vul )**(1/4) 
     agent.vulnerability = (agent.SES_1 + agent.SES_2) / 2
     
 
@@ -214,9 +199,6 @@ def assign_persons_to_houses(model):
             # Assign one adult resident to the house if available
             if adults_available:
                 adult_resident = adults_available.pop(0)
-                if adult_resident in persons_copy:
-                    persons_copy.remove(adult_resident)
-
                 house.residents.append(adult_resident)
                 adult_resident.household = house
                 adult_resident.homeless = False
@@ -224,7 +206,8 @@ def assign_persons_to_houses(model):
                     adult_resident.household.geometry,
                     agent_type="person"
                 )
-                model.space.move_agent(adult_resident, adult_resident.household.geometry)
+                house_position = adult_resident.get_random_point_in_polygon(house.geometry)
+                model.space.move_agent(adult_resident, house_position)
                 num_residents -= 1
 
             # Assign remaining residents to the house

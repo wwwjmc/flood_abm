@@ -202,7 +202,7 @@ class Person_Agent(GeoAgent):
                 if self.evacuated:
                     if random.random() < 0.5:
                         self.evacuated = False                            
-                        self.model.space.add_agents(self)
+                        self.model.space.add_agents([self])
                             
                 for shelter in self.model.shelters:
                     if self in shelter.sheltered_agents:
@@ -403,7 +403,7 @@ class Shelter_Agent(GeoAgent):
         Shelters manage resources, care for agents, and attempt to help them during floods.
         """
         # During Flood and Post Flood
-        if self.model.last_evacuation_time < self.current_hour :        
+        if self.model.last_evacuation_time is not None and self.model.last_evacuation_time < self.current_hour :        
             
             self.num_sheltered_agents = len(self.sheltered_agents)  # Update the count of rescued agents
             
@@ -669,7 +669,7 @@ class House_Agent(GeoAgent):
         Execute one step of the agent's actions within the simulation model.
         """
         # Get flood height for the house's geographic position
-        flood_height = self.model.space.get_flood_height_at_position(self.geometry)
+        flood_height = self.model.space.get_flood_height_at_position(self.geometry.centroid)
         # print(flood_height)
 
         # Check if the house is flooded based on its resilience compared to flood height
@@ -800,7 +800,7 @@ class Government_Agent(GeoAgent):
         """
         Execute one step of the agent's actions within the simulation model.
         """
-        if self.current_hour / 24 == 30:
+        if self.current_hour > 0 and self.current_hour % (24 * 30) == 0:
            self.redistribute_wealth()
         
         self.current_hour += 1  # Increment the current hour
