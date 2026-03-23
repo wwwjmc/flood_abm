@@ -143,6 +143,16 @@ class StudyArea(mg.GeoSpace):
         agents = agent_creator.from_GeoDataFrame(df, unique_id="unique_id")
         print(f"{attr_name}: agents created = {len(agents)}")
 
+        for i, agent in enumerate(agents):
+            row = df.iloc[i]
+
+            if "ADM4_EN" in df.columns:
+                agent.barangay = row["ADM4_EN"]
+            if "fid" in df.columns:
+                agent.barangay_id = row["fid"]
+            if "type_id" in df.columns:
+                agent.type_id = row["type_id"]
+
         # Store the created agents in the corresponding attribute list (e.g., self.houses, self.businesses, etc.)
         # Using extend to add agents to the existing list, ensuring that if this method is called multiple times, it will accumulate agents rather than overwrite them.
         getattr(self, attr_name).extend(agents)

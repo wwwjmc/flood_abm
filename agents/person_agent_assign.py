@@ -1,5 +1,4 @@
 import uuid
-from xml.parsers.expat import model
 from . import flood_agents as FA
 
 from scipy.stats import beta
@@ -51,6 +50,15 @@ def create_person_agents(model):
     for i in range(model.num_persons):
         unique_id = uuid.uuid4().int
         person = FA.Person_Agent(unique_id, model, geometry=None, crs = model.crs)
+
+        person.physical_resilience = 0.0   
+        person.employed = False            
+        person.student = False
+        person.schoolplace = None
+        person.workplace = None
+        person.household = None
+        person.homeless = True
+        person.working_class = False
         
         assign_age(model, i, person)
         assign_wealth(model, i, person)
@@ -66,10 +74,120 @@ def create_person_agents(model):
 
         model.persons_by_wealth_class[person.wealth_class].append(person)
 
-    assign_persons_to_houses(model)
+    assign_persons_to_barangays(model)
     assign_persons_to_businesses(model)
-    assign_persons_to_schools(model)    
+    assign_persons_to_schools(model)
+    assign_positions_to_homeless(model)
 
+    for p in model.schedule.agents:
+        if isinstance(p, FA.Person_Agent) and p.geometry is None:
+            fallback = random.choice(model.space.houses)
+            point = model.get_random_point_in_polygon(fallback.geometry)
+            model.space.move_agent(p, point)    
+
+def assign_persons_to_barangays(model):
+    from . import flood_agents as FA
+
+    for house in model.space.houses:
+        house.residents = []
+
+    persons = [p for p in model.schedule.agents if isinstance(p, FA.Person_Agent)]
+    random.shuffle(persons)
+
+    index = 0
+
+    for brgy_name, population in model.barangay_populations.items():
+        brgy_houses = model.houses_by_barangay.get(brgy_name, [])
+        if not brgy_houses:
+            print(f"No houses found for: {brgy_name}")
+            continue
+
+        brgy_persons = []
+        for _ in range(population):
+            if index >= len(persons):
+                break
+            brgy_persons.append(persons[index])
+            index += 1
+
+        adults = [p for p in brgy_persons if p.age >= 18]
+        if not adults and brgy_persons:
+            adults = brgy_persons[:]
+        
+        for house in brgy_houses:
+            if not brgy_persons:
+                break
+
+            if adults:
+                person = adults.pop(0)
+                brgy_persons.remove(person)
+            else:
+                person = brgy_persons.pop(0)
+
+            house.residents.append(person)
+            person.household = house
+            person.homeless = False
+            person.barangay = brgy_name
+
+            person.physical_resilience = model._get_physical_resilience_from_hazard(
+                house.geometry,
+                agent_type="person"
+            )
+
+            point = model.get_random_point_in_polygon(house.geometry)
+            model.space.move_agent(person, point)
+        
+        while brgy_persons:
+            person = brgy_persons.pop(0)
+            house = random.choice(brgy_houses)
+            house.residents.append(person)
+            person.household = house
+            person.homeless = False
+            person.barangay = brgy_name
+            person.physical_resilience = model._get_physical_resilience_from_hazard(
+                house.geometry,
+                agent_type="person"
+            )
+
+            point = model.get_random_point_in_polygon(house.geometry)
+            model.space.move_agent(person, point)
+
+    print("Total houses:", len(model.space.houses))
+    print("Residents assigned:", sum(len(h.residents) for h in model.space.houses))
+
+def assign_positions_to_homeless(model):
+    houses_by_brgy = {}
+    businesses_by_brgy = {}
+
+    for house in model.space.houses:
+        brgy = getattr(house, "barangay", None)
+        if brgy:
+            houses_by_brgy.setdefault(brgy, []).append(house)
+
+    for business in model.space.businesses:
+        brgy = getattr(business, "barangay", None)
+        if brgy:
+            businesses_by_brgy.setdefault(brgy, []).append(business)
+    
+    for person in model.schedule.agents:
+        if not isinstance(person, FA.Person_Agent):
+            continue
+
+        if person.homeless:
+            brgy = getattr(person, "barangay", None)
+
+            candidate_locations = []
+
+            if brgy:
+                candidate_locations += houses_by_brgy.get(brgy, [])
+                candidate_locations += businesses_by_brgy.get(brgy, [])
+
+            if not candidate_locations:
+                continue
+
+            location = random.choice(candidate_locations)
+            point = model.get_random_point_in_polygon(location.geometry)
+
+            model.space.move_agent(person, point)
 
 def assign_working_class(model, agent):
     if 18 <= agent.age <= 64:
@@ -176,68 +294,6 @@ def assign_mobility(model, person):
     
     # Combine mobility from age and wealth
     person.mobility = age_mobility + wealth_mobility
-
-
-def assign_persons_to_houses(model):
-    for economy, persons in model.persons_by_wealth_class.items():
-        persons_copy = persons[:]  # Make a copy of the list because pop functions removes agents from original list - person_by_economy
-        houses = model.space.houses
-        num_houses = len(houses)
-        residents_per_house = len(persons_copy) // num_houses
-
-        # Keep track of persons and their availability
-        adults_available = [person for person in persons_copy if person.age >= 18]
-
-        # Assign residents to houses
-        for idx, house in enumerate(houses):
-            # Determine the number of residents for this house
-            if idx < num_houses * residents_per_house:
-                num_residents = residents_per_house
-            else:
-                num_residents = residents_per_house + 1
-
-            # Assign one adult resident to the house if available
-            if adults_available:
-                adult_resident = adults_available.pop(0)
-                house.residents.append(adult_resident)
-                adult_resident.household = house
-                adult_resident.homeless = False
-                adult_resident.physical_resilience = model._get_physical_resilience_from_hazard(
-                    adult_resident.household.geometry,
-                    agent_type="person"
-                )
-                house_position = adult_resident.get_random_point_in_polygon(house.geometry)
-                model.space.move_agent(adult_resident, house_position)
-                num_residents -= 1
-
-            # Assign remaining residents to the house
-            for _ in range(num_residents):
-                if persons_copy:
-                    resident = persons_copy.pop(0)  # Take the next resident from the copied list
-                    house.residents.append(resident)
-                    resident.household = house
-                    resident.homeless = False
-                    resident.physical_resilience = model._get_physical_resilience_from_hazard(
-                        resident.household.geometry,
-                        agent_type="person"
-                    )
-                    model.space.move_agent(resident, resident.household.geometry)
-
-        # Handle any remaining persons
-        while persons_copy:
-            resident = persons_copy.pop()
-            house = random.choice(houses)
-            house.residents.append(resident)
-            resident.household = house
-            resident.homeless = False
-            resident.physical_resilience = model._get_physical_resilience_from_hazard(
-                resident.household.geometry,
-                agent_type="person"
-            )
-            model.space.move_agent(resident, resident.household.geometry)
-
-        print("Total houses:", len(model.space.houses))
-        print("Residents assigned:", sum(len(h.residents) for h in model.space.houses))
 
 
 def assign_persons_to_businesses(model):

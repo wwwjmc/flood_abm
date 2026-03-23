@@ -441,6 +441,8 @@ class Shelter_Agent(GeoAgent):
 
             for agent in list(self.sheltered_agents):
                 if agent.time_in_shelter >= 12:
+                    if agent.household is None:
+                        return
                     if not agent.household.flooded:
                         self.sheltered_agents.remove(agent)
         

@@ -55,6 +55,70 @@ class FloodModel(Model):
             model_crs
         )
 
+        self.num_persons = N_persons
+
+        # Barangays
+        self.barangay_populations = {
+            "Anilao": 3019,
+            "Atlag": 4778,
+            "Babatnin": 1002,
+            "Bagna": 4944,
+            "Bagong Bayan": 3206,
+            "Balayong": 4618,
+            "Balite": 3556,
+            "Bangkal": 12935,
+            "Barihan": 5869,
+            "Bulihan": 16224,
+            "Bungahan": 3354,
+            "Dakila": 7215,
+            "Guinhawa": 4335,
+            "Caingin": 7375,
+            "Calero": 1347,
+            "Caliligawan": 530,
+            "Canalate": 3710,
+            "Caniogan": 5297,
+            "Catmon": 2357,
+            "Ligas": 6684,
+            "Liang": 1403,
+            "Longos": 17863,
+            "Look 1st": 9937,
+            "Look 2nd": 3364,
+            "Lugam": 4871,
+            "Mabolo": 6309,
+            "Mambog": 3101,
+            "Masile": 788,
+            "Matimbo": 6699,
+            "Mojon": 16706,
+            "Namayan": 664,
+            "Niugan": 781,
+            "Pamarawan": 2741,
+            "Panasahan": 9664,
+            "Pinagbakahan": 7947,
+            "San Agustin": 2072,
+            "San Gabriel": 2177,
+            "San Juan": 4618,
+            "San Pablo": 5106,
+            "San Vicente (Pob.)": 2475,
+            "Santiago": 1786,
+            "Santisima Trinidad": 6797,
+            "Santo Cristo": 2044,
+            "Santo Niño (Pob.)": 661,
+            "Santo Rosario (Pob.)": 6509,
+            "Santor": 8745,
+            "Sumapang Bata": 2577,
+            "Sumapang Matanda": 9166,
+            "Taal": 1799,
+            "Tikay": 13359,
+            "Cofradia": 4725,
+        }
+
+        total_brgy_pop = sum(self.barangay_populations.values())
+        scale = self.num_persons/total_brgy_pop
+        self.barangay_populations = {
+            k: int(v * scale)
+            for k, v in self.barangay_populations.items()
+        }
+        
         # Print loaded agent counts for verification
         print("houses loaded:", len(self.space.houses))
         print("businesses loaded:", len(self.space.businesses))
@@ -88,7 +152,6 @@ class FloodModel(Model):
         self.schedule = RandomActivation(self)                      # Scheduler that activates agents in random order each step, ensuring a more realistic simulation of interactions and behaviors
         
         # Agent and Infrastructure Count
-        self.num_persons = N_persons
         self.num_houses = len(self.space.houses)
         self.num_businesses = len(self.space.businesses)
         self.num_schools = len(self.space.schools)
@@ -139,13 +202,23 @@ class FloodModel(Model):
     #---------Initialize businesses, schools and houses--------------------
         self._initialize_businesses()
         self._initialize_schools()
-        self._initialize_houses()
+        self._initialize_houses() 
+        self.houses_by_barangay = {}
+
+        for house in self.space.houses:
+            brgy = house.barangay
+            self.houses_by_barangay.setdefault(brgy, []).append(house)
+        
+        print("Barangays from houses:", list(self.houses_by_barangay.keys())[:10])
+        print("Barangays from population:", list(self.barangay_populations.keys())[:10])
         
     #-----------------Initialize person agents--------------------------------
         # Create person agents in the model with demographics, wealth classes, and other attributes based on the number of 
         # persons specified and assign them to schools, workplaces, and homes.
         # From person_agent_assign
         psn_agnt.create_person_agents(self)
+
+        psn_agnt.assign_persons_to_barangays(self)
 
         # Collect initial data on the model state before the simulation starts, such as the number of agents, their attributes, and the initial flood conditions.
         # From data_collect.py
@@ -286,6 +359,7 @@ class FloodModel(Model):
             house.physical_resilience = self._get_physical_resilience_from_hazard(
                 house.geometry, agent_type="house"
             )
+
             self.schedule.add(house)    
     
     #-------------Notify Shelter and get healthcare----------------------------
