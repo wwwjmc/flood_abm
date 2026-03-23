@@ -45,7 +45,7 @@ class StudyArea(mg.GeoSpace):
         for attr in attributes:
             setattr(self, attr, [])
         
-        self.data_crs = "EPSG:4326" # Input CRS used in QGIS
+        self.data_crs = "EPSG:32651" # Input CRS used in QGIS
 
         # Define mappings for Project NOAH / hazard class values
         # 1 = Low hazard (0-0.5 meters)
