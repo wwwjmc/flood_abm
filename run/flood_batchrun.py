@@ -57,17 +57,16 @@ batch_run_params = {
     "flood_days": [10],
     "post_flood_days": [14],
 
-    "houses_file": ["../malolos_map_data/houses.zip"],
-    "businesses_file": ["../malolos_map_data/business.zip"],
-    "schools_file": ["../malolos_map_data/schools.zip"],
-    "shelter_file": ["../malolos_map_data/evacuation-centers.zip"],
-    "healthcare_file": ["../malolos_map_data/hospitals.zip"],
-    "government_file": ["../malolos_map_data/brgy-halls.zip"],
-    "flood_file_1": ["../malolos_map_data/flood1.zip"],
-    "flood_file_2": ["../malolos_map_data/flood2.zip"],
-    "flood_file_3": ["../malolos_map_data/flood3.zip"],
-
-    "model_crs": ["EPSG:32651"]
+    "houses_file": "../malolos_map_data/houses.zip",
+    "businesses_file": "../malolos_map_data/business.zip",
+    "schools_file": "../malolos_map_data/schools.zip",
+    "shelter_file": "../malolos_map_data/evacuation_centers.zip",
+    "healthcare_file": "../malolos_map_data/healthcare.zip",
+    "government_file": "../malolos_map_data/government.zip",
+    "flood_file_1": "../malolos_map_data/flood1.zip",
+    "flood_file_2": "../malolos_map_data/flood2.zip",
+    "flood_file_3": "../malolos_map_data/flood3.zip",
+    "model_crs": "EPSG:32651"
 }
 
 num_iterations = 1
