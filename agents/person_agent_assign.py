@@ -166,14 +166,15 @@ def assign_pwd_by_brgy(model):
             if brgy:
                 persons_by_brgy.setdefault(brgy, []).append(agent)
         
-        for brgy, pwd_count in model.barangay_pwd.items():
-            persons = persons_by_brgy.get(brgy, [])
-            if not persons:
-                continue
-            pwd_count = min(pwd_count, len(persons))
-            selected = random.sample(persons, pwd_count)
-            for person in selected:
-                person.pwd = True
+    for brgy, persons in persons_by_brgy.items():
+        ratio = model.barangay_pwd_ratio.get(brgy, 0)
+        pwd_count = int(len(persons) * ratio)
+        if pwd_count <= 0:
+            continue
+        pwd_count = min(pwd_count, len(persons))
+        selected = random.sample(persons, pwd_count)
+        for person in selected:
+            person.pwd = True
     
     for agent in model.schedule.agents:
         if isinstance(agent, FA.Person_Agent):

@@ -173,9 +173,10 @@ class FloodModel(Model):
             k: int(v * scale)
             for k, v in self.barangay_populations.items()
         }
-        self.barangay_pwd = {
-            k: int(v * scale)
-            for k, v in self.barangay_pwd_raw.items()
+        self.barangay_pwd_ratio = {
+            k: self.barangay_pwd_raw[k]/self.barangay_populations[k]
+            for k in self.barangay_pwd_raw
+            if k in self.barangay_populations and self.barangay_populations[k] > 0
         }
         
         # Print loaded agent counts for verification
@@ -281,7 +282,7 @@ class FloodModel(Model):
 
         pwd_total = sum(
             1 for a in self.schedule.agents
-            if hasattr(a, "is_pwd") and a.is_pwd
+            if hasattr(a, "pwd") and a.pwd
         )
 
         print("PWD assigned:", pwd_total)
