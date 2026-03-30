@@ -21,8 +21,8 @@ def create_person_agents(model):
     - model: The simulation model containing spatial agents and parameters.
     """
     model.num_upper_class_persons = int(0.015 * model.num_persons)  # VALUE UPDATED 1.5% #
-    model.num_upper_middle_class_persons = int(0.041 * model.num_persons)  # VALUE UPDATED 4.1% #
-    model.num_middle_class_persons = int(0.433 * model.num_persons)  # VALUE UPDATED 43.3% #
+    model.num_upper_middle_class_persons = int(0.031 * model.num_persons)  # VALUE UPDATED 3.1% #
+    model.num_middle_class_persons = int(0.403 * model.num_persons)  # VALUE UPDATED 40.3% #
     model.num_lower_class_persons = model.num_persons - model.num_upper_class_persons - model.num_upper_middle_class_persons - model.num_middle_class_persons # VALUE UPDATED #
 
     model.wealth_classes = (
@@ -153,6 +153,31 @@ def assign_persons_to_barangays(model):
 
     print("Total houses:", len(model.space.houses))
     print("Residents assigned:", sum(len(h.residents) for h in model.space.houses))
+
+def assign_pwd_by_brgy(model):
+    from . import flood_agents as FA
+    import random
+
+    persons_by_brgy = {}
+
+    for agent in model.schedule.agents:
+        if isinstance(agent, FA.Person_Agent):
+            brgy = getattr(agent, "barangay", None)
+            if brgy:
+                persons_by_brgy.setdefault(brgy, []).append(agent)
+        
+        for brgy, pwd_count in model.barangay_pwd.items():
+            persons = persons_by_brgy.get(brgy, [])
+            if not persons:
+                continue
+            pwd_count = min(pwd_count, len(persons))
+            selected = random.sample(persons, pwd_count)
+            for person in selected:
+                person.pwd = True
+    
+    for agent in model.schedule.agents:
+        if isinstance(agent, FA.Person_Agent):
+            assign_mobility(model, agent)
 
 def assign_positions_to_homeless(model):
     houses_by_brgy = {}
@@ -294,6 +319,9 @@ def assign_mobility(model, person):
     
     # Combine mobility from age and wealth
     person.mobility = age_mobility + wealth_mobility
+
+    if person.pwd:
+        person.mobility *= 0.3
 
 
 def assign_persons_to_businesses(model):

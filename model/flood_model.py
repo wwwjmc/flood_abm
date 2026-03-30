@@ -104,12 +104,67 @@ class FloodModel(Model):
             "Santo Cristo": 2044,
             "Santo Niño (Pob.)": 661,
             "Santo Rosario (Pob.)": 6509,
-            "Santor": 8745,
+            "Santos": 8745,
             "Sumapang Bata": 2577,
             "Sumapang Matanda": 9166,
             "Taal": 1799,
             "Tikay": 13359,
             "Cofradia": 4725,
+        }
+        
+        # PWDs
+        self.barangay_pwd_raw = {
+            "Anilao": 46, 
+            "Atlag": 106, 
+            "Babatnin": 11, 
+            "Bagna": 66, 
+            "Bagong Bayan": 81, 
+            "Balayong": 76, 
+            "Balite": 67, 
+            "Bangkal": 162, 
+            "Barihan": 116, 
+            "Bulihan": 108, 
+            "Bungahan": 66, 
+            "Dakila": 109, 
+            "Guinhawa": 30, 
+            "Caingin": 168, 
+            "Calero": 17, 
+            "Caliligawan": 12, 
+            "Canalate": 78, 
+            "Caniogan": 102, 
+            "Catmon": 46, 
+            "Ligas": 38, 
+            "Liang": 32, 
+            "Longos": 291, 
+            "Look 1st": 170, 
+            "Look 2nd": 29, 
+            "Lugam": 71, 
+            "Mabolo": 130, 
+            "Mambog": 44, 
+            "Masile": 14, 
+            "Matimbo": 101, 
+            "Mojon": 333, 
+            "Namayan": 8, 
+            "Niugan": 17, 
+            "Pamarawan": 66, 
+            "Panasahan": 163, 
+            "Pinagbakahan": 79, 
+            "San Agustin": 57, 
+            "San Gabriel": 58, 
+            "San Juan": 61, 
+            "San Pablo": 92, 
+            "San Vicente (Pob.)": 52, 
+            "Santiago": 32, 
+            "Santisima Trinidad": 119, 
+            "Santo Cristo": 59, 
+            "Santo Niño (Pob.)": 17, 
+            "Santo Rosario (Pob.)": 132, 
+            "Santos": 131, 
+            "Sumapang Bata": 49, 
+            "Sumapang Matanda": 134, 
+            "Taal": 50, 
+            "Tikay": 117, 
+            "Cofradia": 82,
         }
 
         total_brgy_pop = sum(self.barangay_populations.values())
@@ -117,6 +172,10 @@ class FloodModel(Model):
         self.barangay_populations = {
             k: int(v * scale)
             for k, v in self.barangay_populations.items()
+        }
+        self.barangay_pwd = {
+            k: int(v * scale)
+            for k, v in self.barangay_pwd_raw.items()
         }
         
         # Print loaded agent counts for verification
@@ -217,8 +276,16 @@ class FloodModel(Model):
         # persons specified and assign them to schools, workplaces, and homes.
         # From person_agent_assign
         psn_agnt.create_person_agents(self)
-
         psn_agnt.assign_persons_to_barangays(self)
+        psn_agnt.assign_pwd_by_brgy(self)
+
+        pwd_total = sum(
+            1 for a in self.schedule.agents
+            if hasattr(a, "is_pwd") and a.is_pwd
+        )
+
+        print("PWD assigned:", pwd_total)
+        print("Expected:", sum(self.barangay_pwd_raw.values()))
 
         # Collect initial data on the model state before the simulation starts, such as the number of agents, their attributes, and the initial flood conditions.
         # From data_collect.py

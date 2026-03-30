@@ -53,6 +53,7 @@ class Person_Agent(GeoAgent):
         self.wealth_class = None
         self.education = None
         self.gender = None
+        self.pwd = False
         
         # Location and employment attributes
         self.household = None  
@@ -302,7 +303,7 @@ class Person_Agent(GeoAgent):
     
         for _ in range(num_moves):
             angle = random.uniform(0, 2 * np.pi)
-            distance = random.uniform(0, self.mobility * 20)
+            distance = random.uniform(0, self.mobility * (10 if self.pwd else 20))
             dx = distance * np.cos(angle)
             dy = distance * np.sin(angle)
             new_x = current_position.x + dx
