@@ -48,7 +48,7 @@ print(f"Memory usage before batch run: {mem_before:.2f} MB")
 print(f"CPU usage before batch run: {cpu_before:.2f}%")
 
 batch_run_params = {
-    "N_persons": [1000],
+    "N_persons": [100],
     "shelter_cap_limit": [1],
     "healthcare_cap_limit": [5],
     "shelter_funding": [50000],
