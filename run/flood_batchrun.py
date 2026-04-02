@@ -48,13 +48,13 @@ print(f"Memory usage before batch run: {mem_before:.2f} MB")
 print(f"CPU usage before batch run: {cpu_before:.2f}%")
 
 batch_run_params = {
-    "N_persons": [100],
+    "N_persons": [1000],
     "shelter_cap_limit": [1],
     "healthcare_cap_limit": [5],
     "shelter_funding": [50000],
     "healthcare_funding": [100000],
     "pre_flood_days": [14],
-    "flood_days": [10],
+    "flood_days": [10], 
     "post_flood_days": [14],
 
     "houses_file": "../malolos_map_data/houses.zip",

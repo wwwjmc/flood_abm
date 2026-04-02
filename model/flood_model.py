@@ -167,6 +167,7 @@ class FloodModel(Model):
             "Cofradia": 82,
         }
 
+        self.original_barangay_populations = self.barangay_populations.copy()
         total_brgy_pop = sum(self.barangay_populations.values())
         scale = self.num_persons/total_brgy_pop
         self.barangay_populations = {
@@ -174,9 +175,9 @@ class FloodModel(Model):
             for k, v in self.barangay_populations.items()
         }
         self.barangay_pwd_ratio = {
-            k: self.barangay_pwd_raw[k]/self.barangay_populations[k]
+            k: self.barangay_pwd_raw[k]/self.original_barangay_populations[k]
             for k in self.barangay_pwd_raw
-            if k in self.barangay_populations and self.barangay_populations[k] > 0
+            if k in self.original_barangay_populations
         }
         
         # Print loaded agent counts for verification
@@ -277,16 +278,18 @@ class FloodModel(Model):
         # persons specified and assign them to schools, workplaces, and homes.
         # From person_agent_assign
         psn_agnt.create_person_agents(self)
-        psn_agnt.assign_persons_to_barangays(self)
         psn_agnt.assign_pwd_by_brgy(self)
 
-        pwd_total = sum(
-            1 for a in self.schedule.agents
-            if hasattr(a, "pwd") and a.pwd
+        from collections import Counter
+        from agents import flood_agents as FA
+        assigned_counts = Counter(
+            p.barangay for p in self.schedule.agents
+            if isinstance(p, FA.Person_Agent)
         )
-
-        print("PWD assigned:", pwd_total)
-        print("Expected:", sum(self.barangay_pwd_raw.values()))
+        print("\nBarangay Distribution:")
+        for brgy, count in assigned_counts.items():
+            print(f"{brgy}: {count}")
+        print("Total persons:", sum(assigned_counts.values()))
 
         # Collect initial data on the model state before the simulation starts, such as the number of agents, their attributes, and the initial flood conditions.
         # From data_collect.py

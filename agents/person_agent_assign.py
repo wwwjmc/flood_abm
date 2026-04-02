@@ -88,75 +88,74 @@ def create_person_agents(model):
 def assign_persons_to_barangays(model):
     from . import flood_agents as FA
 
+    persons = [p for p in model.schedule.agents if isinstance(p, FA.Person_Agent)]
+
+    total_pop = sum(model.barangay_populations.values())
+    barangay_probs = {
+        brgy: pop / total_pop
+        for brgy, pop in model.barangay_populations.items()
+    }
+
+    barangay_list = list(barangay_probs.keys())
+    barangay_weights = list(barangay_probs.values())
+
+    persons_by_brgy = {brgy: [] for brgy in barangay_list}
+
+    for person in persons:
+        chosen_brgy = random.choices(barangay_list, weights=barangay_weights, k=1)[0]
+        person.barangay = chosen_brgy
+        persons_by_brgy[chosen_brgy].append(person)
+
     for house in model.space.houses:
         house.residents = []
 
-    persons = [p for p in model.schedule.agents if isinstance(p, FA.Person_Agent)]
-    random.shuffle(persons)
-
-    index = 0
-
-    for brgy_name, population in model.barangay_populations.items():
-        brgy_houses = model.houses_by_barangay.get(brgy_name, [])
+    for brgy, brgy_persons in persons_by_brgy.items():
+        brgy_houses = model.houses_by_barangay.get(brgy, [])
         if not brgy_houses:
-            print(f"No houses found for: {brgy_name}")
             continue
-
-        brgy_persons = []
-        for _ in range(population):
-            if index >= len(persons):
-                break
-            brgy_persons.append(persons[index])
-            index += 1
-
+        random.shuffle(brgy_persons)
         adults = [p for p in brgy_persons if p.age >= 18]
-        if not adults and brgy_persons:
-            adults = brgy_persons[:]
-        
+        non_adults = [p for p in brgy_persons if p.age < 18]
+
         for house in brgy_houses:
             if not brgy_persons:
                 break
-
             if adults:
-                person = adults.pop(0)
+                person = adults.pop()
                 brgy_persons.remove(person)
+            elif brgy_persons:
+                person = brgy_persons.pop()
             else:
-                person = brgy_persons.pop(0)
+                break
 
             house.residents.append(person)
             person.household = house
             person.homeless = False
-            person.barangay = brgy_name
 
             person.physical_resilience = model._get_physical_resilience_from_hazard(
                 house.geometry,
                 agent_type="person"
             )
-
             point = model.get_random_point_in_polygon(house.geometry)
             model.space.move_agent(person, point)
         
-        while brgy_persons:
-            person = brgy_persons.pop(0)
+        remaining = brgy_persons
+        for person in remaining:
             house = random.choice(brgy_houses)
             house.residents.append(person)
             person.household = house
             person.homeless = False
-            person.barangay = brgy_name
+
             person.physical_resilience = model._get_physical_resilience_from_hazard(
                 house.geometry,
                 agent_type="person"
             )
-
             point = model.get_random_point_in_polygon(house.geometry)
             model.space.move_agent(person, point)
-
-    print("Total houses:", len(model.space.houses))
-    print("Residents assigned:", sum(len(h.residents) for h in model.space.houses))
+    print("Assigned residents:", sum(len(h.residents) for h in model.space.houses))
 
 def assign_pwd_by_brgy(model):
     from . import flood_agents as FA
-    import random
 
     persons_by_brgy = {}
 
@@ -166,19 +165,19 @@ def assign_pwd_by_brgy(model):
             if brgy:
                 persons_by_brgy.setdefault(brgy, []).append(agent)
         
+    total_pwd = 0
+
     for brgy, persons in persons_by_brgy.items():
         ratio = model.barangay_pwd_ratio.get(brgy, 0)
-        pwd_count = int(len(persons) * ratio)
-        if pwd_count <= 0:
-            continue
-        pwd_count = min(pwd_count, len(persons))
-        selected = random.sample(persons, pwd_count)
-        for person in selected:
-            person.pwd = True
-    
-    for agent in model.schedule.agents:
-        if isinstance(agent, FA.Person_Agent):
-            assign_mobility(model, agent)
+
+        for person in persons:
+            if random.random() < ratio:
+                person.pwd = True
+                total_pwd += 1
+            else:
+                person.pwd = False
+
+    print("PWD assigned:", total_pwd)
 
 def assign_positions_to_homeless(model):
     houses_by_brgy = {}
