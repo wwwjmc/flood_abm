@@ -16,16 +16,26 @@ import os
 from matplotlib import legend
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-
 import agents.flood_agents as FA
 from model.flood_model import FloodModel
-from space.flood_space import FloodArea
+from space.flood_space import FloodArea, MergedDamRoute, MalolosHydroRiver, MalolosChannel
 
 import mesa_geo as mg
-from mesa.visualization import ModularServer
+from mesa.visualization import Choice, ModularServer
 from mesa.visualization.modules import ChartModule, TextElement
 from mesa.visualization import Slider
 
+try:
+    from mesa.visualization import StaticText
+except ImportError:
+    try:
+        from mesa.visualization.UserParam import UserSettableParameter
+
+        def StaticText(name, value=""):
+            return UserSettableParameter("static_text", name, value=value)
+    except Exception:
+        StaticText = None
+    
 import warnings
 import psutil
 import xyzservices.providers as xyz
@@ -102,7 +112,46 @@ def agent_portrayal(agent):
     
     elif isinstance(agent, FA.Government_Agent):
         portrayal["color"] = "Magenta"   
-
+    
+    # -----------------------------------------------------------------------
+    # Network layer portrayals
+    # Lines shown only when the reach is active (carrying flow this step).
+    # Color encodes severity: blue=low, orange=moderate, red=high.
+    # Inactive reaches are rendered very faintly so the map stays readable.
+    # -----------------------------------------------------------------------
+    elif isinstance(agent, MergedDamRoute):
+        if getattr(agent, "active", False):
+            sev = getattr(agent, "current_sev", 0)
+            portrayal["color"] = "#1a6faf" if sev <= 1 else ("#e07b00" if sev == 2 else "#cc0000")
+            portrayal["weight"] = 2
+            portrayal["opacity"] = 0.7
+        else:
+            portrayal["color"] = "#aaaaaa"
+            portrayal["weight"] = 0.5
+            portrayal["opacity"] = 0.15
+ 
+    elif isinstance(agent, MalolosHydroRiver):
+        if getattr(agent, "active", False):
+            sev = getattr(agent, "current_sev", 0)
+            portrayal["color"] = "#1a6faf" if sev <= 1 else ("#e07b00" if sev == 2 else "#cc0000")
+            portrayal["weight"] = 2.5
+            portrayal["opacity"] = 0.8
+        else:
+            portrayal["color"] = "#5599cc"
+            portrayal["weight"] = 1
+            portrayal["opacity"] = 0.2
+ 
+    elif isinstance(agent, MalolosChannel):
+        if getattr(agent, "active", False):
+            sev = getattr(agent, "current_sev", 0)
+            portrayal["color"] = "#33aadd" if sev <= 1 else ("#e07b00" if sev == 2 else "#cc0000")
+            portrayal["weight"] = 1.5
+            portrayal["opacity"] = 0.75
+        else:
+            portrayal["color"] = "#88ccee"
+            portrayal["weight"] = 0.8
+            portrayal["opacity"] = 0.15
+ 
     return portrayal
 
 
@@ -112,29 +161,61 @@ class colorLegend(TextElement):
 
     def render(self, model):
 
+        # legend = "<div style='padding:10px;font-size:14px;display:grid;"
+        # legend += "grid-template-columns:repeat(4,auto);gap:6px 18px;align-items:center;'>"
+
+        # legend += "<strong>Legend</strong><span></span><span></span>"
+
+        # # Persons (circles)
+        # legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:green;margin-right:6px;'></span>Person</span>"
+        # legend += "<span><span style='display:inline-block;width:12px;height:12px;background:grey;border:1px solid #555;margin-right:6px;'></span>House</span>"
+        # legend += "<span><span style='display:inline-block;width:12px;height:12px;background:orange;border:1px solid #555;margin-right:6px;'></span>Healthcare</span>"
+        # legend += "<span><span style='display:inline-block;width:12px;height:12px;background:yellow;opacity:0.35;border:1px solid #555;margin-right:6px;'></span>Flood Low</span>"
+
+        # legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:red;margin-right:6px;'></span>Stranded</span>"
+        # legend += "<span><span style='display:inline-block;width:12px;height:12px;background:purple;border:1px solid #555;margin-right:6px;'></span>Business</span>"
+        # legend += "<span><span style='display:inline-block;width:12px;height:12px;background:yellow;border:1px solid #555;margin-right:6px;'></span>School</span>"
+        # legend += "<span><span style='display:inline-block;width:12px;height:12px;background:orange;opacity:0.35;border:1px solid #555;margin-right:6px;'></span>Flood Medium</span>"
+
+        # legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:orange;margin-right:6px;'></span>Injured</span>"
+        # legend += "<span><span style='display:inline-block;width:12px;height:12px;background:magenta;border:1px solid #555;margin-right:6px;'></span>Government</span>"
+        # legend += "<span><span style='display:inline-block;width:12px;height:12px;background:blue;border:1px solid #555;margin-right:6px;'></span>Shelter</span>"
+        # legend += "<span><span style='display:inline-block;width:12px;height:12px;background:red;opacity:0.35;border:1px solid #555;margin-right:6px;'></span>Flood High</span>"
+
+        # legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:black;margin-right:6px;'></span>Deceased</span>"
+        # legend += "<span><span style='display:inline-block;width:12px;height:12px;background:orange;border:1px solid #555;margin-right:6px;'></span>Healthcare</span>"
+        # legend += "</div>"
+
         legend = "<div style='padding:10px;font-size:14px;display:grid;"
         legend += "grid-template-columns:repeat(4,auto);gap:6px 18px;align-items:center;'>"
-
+ 
         legend += "<strong>Legend</strong><span></span><span></span>"
-
+ 
         # Persons (circles)
         legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:green;margin-right:6px;'></span>Person</span>"
         legend += "<span><span style='display:inline-block;width:12px;height:12px;background:grey;border:1px solid #555;margin-right:6px;'></span>House</span>"
         legend += "<span><span style='display:inline-block;width:12px;height:12px;background:orange;border:1px solid #555;margin-right:6px;'></span>Healthcare</span>"
         legend += "<span><span style='display:inline-block;width:12px;height:12px;background:yellow;opacity:0.35;border:1px solid #555;margin-right:6px;'></span>Flood Low</span>"
-
+ 
         legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:red;margin-right:6px;'></span>Stranded</span>"
         legend += "<span><span style='display:inline-block;width:12px;height:12px;background:purple;border:1px solid #555;margin-right:6px;'></span>Business</span>"
         legend += "<span><span style='display:inline-block;width:12px;height:12px;background:yellow;border:1px solid #555;margin-right:6px;'></span>School</span>"
         legend += "<span><span style='display:inline-block;width:12px;height:12px;background:orange;opacity:0.35;border:1px solid #555;margin-right:6px;'></span>Flood Medium</span>"
-
+ 
         legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:orange;margin-right:6px;'></span>Injured</span>"
         legend += "<span><span style='display:inline-block;width:12px;height:12px;background:magenta;border:1px solid #555;margin-right:6px;'></span>Government</span>"
         legend += "<span><span style='display:inline-block;width:12px;height:12px;background:blue;border:1px solid #555;margin-right:6px;'></span>Shelter</span>"
         legend += "<span><span style='display:inline-block;width:12px;height:12px;background:red;opacity:0.35;border:1px solid #555;margin-right:6px;'></span>Flood High</span>"
-
+ 
         legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:black;margin-right:6px;'></span>Deceased</span>"
         legend += "<span><span style='display:inline-block;width:12px;height:12px;background:orange;border:1px solid #555;margin-right:6px;'></span>Healthcare</span>"
+ 
+        legend += "<strong>Network (active)</strong><span></span><span></span><span></span>"
+        legend += "<span><span style='display:inline-block;width:24px;height:3px;background:#1a6faf;margin-right:6px;vertical-align:middle;'></span>Low severity</span>"
+        legend += "<span><span style='display:inline-block;width:24px;height:3px;background:#e07b00;margin-right:6px;vertical-align:middle;'></span>Moderate severity</span>"
+        legend += "<span><span style='display:inline-block;width:24px;height:3px;background:#cc0000;margin-right:6px;vertical-align:middle;'></span>High severity</span>"
+        legend += "<span><span style='display:inline-block;width:24px;height:3px;background:#aaaaaa;margin-right:6px;vertical-align:middle;opacity:0.4;'></span>Inactive reach</span>"
+ 
         legend += "</div>"
         return legend
 
@@ -148,6 +229,37 @@ model_params = {
     "flood_days": Slider("Flood Days", 10, 3, 30, 1),
     "post_flood_days": Slider("Post Flood Days", 14, 0, 90, 1),
 
+    "dam_scenario_name": Choice(
+        "Dam scenario",
+        value="S2",
+        choices=["S0", "S1", "S2", "S3"],
+    ),
+}
+
+if StaticText is not None:
+    _dam_scenario_legend_html = (
+        "<div style='font-size:12px; line-height:1.45; padding:6px 8px; "
+        "margin:2px 0 8px 0; background:#f7f7f7; border:1px solid #d9d9d9; border-radius:6px;'>"
+        "<strong>Scenario guide</strong><br>"
+        "<strong>S0</strong> - Baseline: no dam effect added.<br>"
+        "<strong>S1</strong> - Normal operations: low or typical release.<br>"
+        "<strong>S2</strong> - Controlled release: moderate pre-emptive release before spill.<br>"
+        "<strong>S3</strong> - Emergency spill: high-release stress test for downstream flooding."
+        "</div>"
+    )
+
+    try:
+        model_params["dam_scenario_legend"] = StaticText(value=_dam_scenario_legend_html)
+    except TypeError:
+        try:
+            model_params["dam_scenario_legend"] = StaticText(_dam_scenario_legend_html)
+        except TypeError:
+            try:
+                model_params["dam_scenario_legend"] = StaticText("", _dam_scenario_legend_html)
+            except TypeError:
+                model_params["dam_scenario_legend"] = StaticText("", value=_dam_scenario_legend_html)
+
+model_params.update({
     "houses_file": "../malolos_map_data/houses.zip",
     "businesses_file": "../malolos_map_data/business.zip",
     "schools_file": "../malolos_map_data/schools.zip",
@@ -157,8 +269,13 @@ model_params = {
     "flood_file_1": "../malolos_map_data/flood1.zip",
     "flood_file_2": "../malolos_map_data/flood2.zip",
     "flood_file_3": "../malolos_map_data/flood3.zip",
+
+    "dam_scenarios_file": "../malolos_map_data/dam_scenarios_simple.csv",
+    "merged_dams_file": "../malolos_map_data/merged_dams.zip",
+    "malolos_hydrorivers_file": "../malolos_map_data/malolos_hydrorivers.zip",
+    "malolos_channels_file": "../malolos_map_data/malolos_channels.zip",
     "model_crs": "EPSG:32651"
-}
+})
 
 # Create a canvas grid with given portrayal function and agent dimensions
 map_element = mg.visualization.MapModule(
