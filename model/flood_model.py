@@ -33,6 +33,8 @@ from mesa import Model
 from agents import person_agent_assign as psn_agnt
 from mesa.time import RandomActivation
 from data_collection import data_collect
+from collections import defaultdict
+import agents.flood_agents as FA
 
 
 # FloodModel inherits from Mesa’s Model class. So it becomes a Mesa-compatible simulation model.
@@ -340,23 +342,13 @@ class FloodModel(Model):
             data_collect.data_collection(self)
             print("Persons created:", self.num_persons)
             print("Total scheduled agents:", len(self.schedule.agents)) 
-            
         
-# ==========================================================================
-# STEP FUNCTION
-# ==========================================================================
-    
-    """
-        Actions per simulation step (1 step = 1 hour).
-        Order of operations:
-          1. Determine disaster period from current time.
-          2. Add / remove static flood hazard maps on period transitions.
-          3. Run the four-stage network update (dam → hydro → channel) during flood.
-          4. Re-evaluate each person agent's current flood exposure from the combined
-             spatial signal (static hazard + network bonuses).
-          5. Activate all agents via the scheduler.
-          6. Collect and save data.
-    """
+        
+    #-------------------------------Step function------------------------------
+    # The step function defines the actions that occur at each time step of the simulation. 
+    # It updates the disaster period based on the current time, 
+    # handles the addition and removal of flood maps to simulate changing flood conditions, 
+    # activates all agents according to the schedule, collects data, and saves the results to a CSV file for analysis.
     
     def step(self):
         # Update disaster period based on current time and defined thresholds for evacuation and flood duration. 
@@ -420,6 +412,8 @@ class FloodModel(Model):
         self.schedule.step()
         self.datacollector.collect(self)
 
+        self.barangay_stats = self.compute_barangay_stats()
+
         # ------------------------------------------------------------------
         # 6. Save collected data
         # ------------------------------------------------------------------
@@ -435,6 +429,7 @@ class FloodModel(Model):
 # FLOOD MAP MANAGEMENT 
 # ==========================================================================   
     
+        
     def add_flood_maps(self, flood_file):
         """Reveal the actual hazard Var for all FloodArea agents from this file."""
         for agent in self.space.flood_areas:
@@ -760,3 +755,26 @@ class FloodModel(Model):
                 comm.current_flood_var = self.space.get_total_flood_var_at_position(comm.geometry.centroid)
             except Exception:
                 comm.current_flood_var = 0
+
+
+    def compute_barangay_stats(self):
+        stats = defaultdict(lambda: {
+            "population": 0,
+            "evacuated": 0,
+            "stranded": 0,
+            "injured": 0,
+            "dead": 0
+        })
+        for agent in self.schedule.agents:
+            if isinstance(agent, FA.Person_Agent):
+                brgy = agent.barangay
+                stats[brgy]["population"] += 1
+                if getattr(agent, "evacuated", False):
+                    stats[brgy]["evacuated"] += 1
+                if getattr(agent, "stranded", False):
+                    stats[brgy]["stranded"] += 1
+                if getattr(agent, "injured", False):
+                    stats[brgy]["injured"] += 1
+                if not getattr(agent, "alive", True):
+                    stats[brgy]["dead"] += 1
+        return dict(stats)

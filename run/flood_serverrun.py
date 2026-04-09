@@ -224,6 +224,46 @@ class colorLegend(TextElement):
         legend += "</div>"
         return legend
 
+class BarangayPanel(TextElement):
+    def render(self, model):
+        stats = model.compute_barangay_stats()
+
+        html = "<div style='padding:10px; font-size:12px; max-height:400px; overflow-y:auto;'>"
+        html += "<strong>Barangay Stats</strong><br><br>"
+        html += """
+        <table style='width:100%; border-collapse:collapse; text-align:center;'>
+            <tr style='background:#eee;'>
+                <th style='border:1px solid #ccc; padding:4px;'>Barangay</th>
+                <th style='border:1px solid #ccc; padding:4px;'>Population</th>
+                <th style='border:1px solid #ccc; padding:4px;'>Evacuated</th>
+                <th style='border:1px solid #ccc; padding:4px;'>Stranded</th>
+                <th style='border:1px solid #ccc; padding:4px;'>Injured</th>
+                <th style='border:1px solid #ccc; padding:4px;'>Dead</th>
+            </tr>
+        """
+
+        for brgy, data in sorted(
+            stats.items(),
+            key=lambda x: (
+                x[1]["population"],
+                x[1]["stranded"] + x[1]["injured"] + x[1]["dead"]
+            ),
+            reverse=True
+        ):
+            html += f"""
+            <tr>
+                <td style='border:1px solid #ccc; padding:4px;'>{brgy}</td>
+                <td style='border:1px solid #ccc; padding:4px;'>{data['population']}</td>
+                <td style='border:1px solid #ccc; padding:4px;'>{data['evacuated']}</td>
+                <td style='border:1px solid #ccc; padding:4px;'>{data['stranded']}</td>
+                <td style='border:1px solid #ccc; padding:4px;'>{data['injured']}</td>
+                <td style='border:1px solid #ccc; padding:4px;'>{data['dead']}</td>
+            </tr>
+            """
+
+        html += "</table>"
+        return html
+
 model_params = {
     "N_persons": Slider("Number of persons", 300, 10, 1500, 10),
     "shelter_cap_limit": Slider("Shelter Capacity(% of pop.)", 1, 0, 10, 0.3),
@@ -292,6 +332,8 @@ map_element = mg.visualization.MapModule(
 
 # Add the legend to the visualization
 legend = colorLegend()
+
+barangay_panel = BarangayPanel()
 
 #---------------------- SES index data visuals-----------------------------
 # Define a function to create SES-specific chart modules for decision-making phases
@@ -391,7 +433,7 @@ all_charts = (
 # Now you can pass all_charts to the server
 server = ModularServer(
     FloodModel,
-    [map_element, legend] + all_charts,
+    [map_element, legend, barangay_panel] + all_charts,
     "Flood Model - Vulnerabilities and Decision Making",
     model_params,
 )
