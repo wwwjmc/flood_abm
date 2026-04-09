@@ -691,7 +691,7 @@ class FloodModel(Model):
 
             if handoff_id not in hydro_index:
                 continue
-
+            
             hr = hydro_index[handoff_id]
             hr.active = True
             hr.current_q = max(getattr(hr, "current_q", 0.0), getattr(route, "current_q", 0.0))

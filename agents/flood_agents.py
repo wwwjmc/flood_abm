@@ -312,9 +312,17 @@ class Person_Agent(GeoAgent):
     
             possible_moves.append(possible_move)
     
-        # Filter out unsafe moves based on flood resilience
-        safe_moves = [move for move in possible_moves
-              if self.physical_resilience > self.model.space.get_flood_height_at_position(move)]
+        # Use the same severity-to-depth mapping used elsewhere in the model
+        depth_map = {0: 0.0, 1: 0.25, 2: 1.00, 3: 2.00}
+
+        # Filter out unsafe moves based on COMBINED hazard
+        safe_moves = []
+        for move in possible_moves:
+            total_var = self.model.space.get_total_flood_var_at_position(move)
+            total_depth = depth_map.get(total_var, 0.0)
+
+            if self.physical_resilience > total_depth:
+                safe_moves.append(move)
     
         if not safe_moves:
             self.stranded_behavior()
@@ -325,12 +333,16 @@ class Person_Agent(GeoAgent):
             chosen_spot = random.choice(safe_moves)
             # print("random_spot", chosen_spot)
             self.model.space.move_agent(self, chosen_spot)
+
+            # Optional but useful: update current flood state immediately after movement
+            self.current_flood_var = self.model.space.get_total_flood_var_at_position(chosen_spot)
+            self.current_flood_depth = depth_map.get(self.current_flood_var, 0.0)
     
             # Check if the agent comes in contact with a business
             for business in self.model.space.businesses:
                 if business.geometry.contains(chosen_spot):
                     service_cost = self.get_hourly_wage() * random.uniform(0.5, 1.5)
-                    
+                        
                     if not business.flooded:
                         self.income -= service_cost  # Deduct service cost from agent's income
                         business.wealth += service_cost * random.uniform(1,1.5)  # VALUE UPDATED #

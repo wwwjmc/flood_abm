@@ -120,37 +120,46 @@ def agent_portrayal(agent):
     # Inactive reaches are rendered very faintly so the map stays readable.
     # -----------------------------------------------------------------------
     elif isinstance(agent, MergedDamRoute):
-        if getattr(agent, "active", False):
-            sev = getattr(agent, "current_sev", 0)
-            portrayal["color"] = "#1a6faf" if sev <= 1 else ("#e07b00" if sev == 2 else "#cc0000")
-            portrayal["weight"] = 2
-            portrayal["opacity"] = 0.7
+        sev = getattr(agent, "current_sev", 0)
+        active = getattr(agent, "active", False)
+
+        if active:
+            portrayal["color"] = "#7a00cc" if sev <= 1 else ("#e07b00" if sev == 2 else "#cc0000")
+            portrayal["weight"] = 4
+            portrayal["opacity"] = 0.95
         else:
-            portrayal["color"] = "#aaaaaa"
-            portrayal["weight"] = 0.5
-            portrayal["opacity"] = 0.15
- 
+            # always visible background route
+            portrayal["color"] = "#b57edc"
+            portrayal["weight"] = 2.2
+            portrayal["opacity"] = 0.55
+
     elif isinstance(agent, MalolosHydroRiver):
-        if getattr(agent, "active", False):
-            sev = getattr(agent, "current_sev", 0)
+        sev = getattr(agent, "current_sev", 0)
+        active = getattr(agent, "active", False)
+
+        if active:
             portrayal["color"] = "#1a6faf" if sev <= 1 else ("#e07b00" if sev == 2 else "#cc0000")
-            portrayal["weight"] = 2.5
-            portrayal["opacity"] = 0.8
+            portrayal["weight"] = 4
+            portrayal["opacity"] = 0.95
         else:
-            portrayal["color"] = "#5599cc"
-            portrayal["weight"] = 1
-            portrayal["opacity"] = 0.2
- 
+            # always visible main river backbone
+            portrayal["color"] = "#4f81bd"
+            portrayal["weight"] = 2.8
+            portrayal["opacity"] = 0.6
+
     elif isinstance(agent, MalolosChannel):
-        if getattr(agent, "active", False):
-            sev = getattr(agent, "current_sev", 0)
+        sev = getattr(agent, "current_sev", 0)
+        active = getattr(agent, "active", False)
+
+        if active:
             portrayal["color"] = "#33aadd" if sev <= 1 else ("#e07b00" if sev == 2 else "#cc0000")
-            portrayal["weight"] = 1.5
-            portrayal["opacity"] = 0.75
+            portrayal["weight"] = 3
+            portrayal["opacity"] = 0.95
         else:
-            portrayal["color"] = "#88ccee"
-            portrayal["weight"] = 0.8
-            portrayal["opacity"] = 0.15
+            # always visible local channels
+            portrayal["color"] = "#8ecae6"
+            portrayal["weight"] = 1.8
+            portrayal["opacity"] = 0.5
  
     return portrayal
 
@@ -160,62 +169,58 @@ class colorLegend(TextElement):
         pass
 
     def render(self, model):
+        legend = ""
 
-        # legend = "<div style='padding:10px;font-size:14px;display:grid;"
-        # legend += "grid-template-columns:repeat(4,auto);gap:6px 18px;align-items:center;'>"
+        # Main legend block
+        legend += "<div style='padding:10px;font-size:14px;'>"
 
-        # legend += "<strong>Legend</strong><span></span><span></span>"
+        legend += "<div style='display:grid;grid-template-columns:repeat(4,auto);gap:6px 18px;align-items:center;'>"
+        legend += "<strong>Legend</strong><span></span><span></span><span></span>"
 
-        # # Persons (circles)
-        # legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:green;margin-right:6px;'></span>Person</span>"
-        # legend += "<span><span style='display:inline-block;width:12px;height:12px;background:grey;border:1px solid #555;margin-right:6px;'></span>House</span>"
-        # legend += "<span><span style='display:inline-block;width:12px;height:12px;background:orange;border:1px solid #555;margin-right:6px;'></span>Healthcare</span>"
-        # legend += "<span><span style='display:inline-block;width:12px;height:12px;background:yellow;opacity:0.35;border:1px solid #555;margin-right:6px;'></span>Flood Low</span>"
-
-        # legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:red;margin-right:6px;'></span>Stranded</span>"
-        # legend += "<span><span style='display:inline-block;width:12px;height:12px;background:purple;border:1px solid #555;margin-right:6px;'></span>Business</span>"
-        # legend += "<span><span style='display:inline-block;width:12px;height:12px;background:yellow;border:1px solid #555;margin-right:6px;'></span>School</span>"
-        # legend += "<span><span style='display:inline-block;width:12px;height:12px;background:orange;opacity:0.35;border:1px solid #555;margin-right:6px;'></span>Flood Medium</span>"
-
-        # legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:orange;margin-right:6px;'></span>Injured</span>"
-        # legend += "<span><span style='display:inline-block;width:12px;height:12px;background:magenta;border:1px solid #555;margin-right:6px;'></span>Government</span>"
-        # legend += "<span><span style='display:inline-block;width:12px;height:12px;background:blue;border:1px solid #555;margin-right:6px;'></span>Shelter</span>"
-        # legend += "<span><span style='display:inline-block;width:12px;height:12px;background:red;opacity:0.35;border:1px solid #555;margin-right:6px;'></span>Flood High</span>"
-
-        # legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:black;margin-right:6px;'></span>Deceased</span>"
-        # legend += "<span><span style='display:inline-block;width:12px;height:12px;background:orange;border:1px solid #555;margin-right:6px;'></span>Healthcare</span>"
-        # legend += "</div>"
-
-        legend = "<div style='padding:10px;font-size:14px;display:grid;"
-        legend += "grid-template-columns:repeat(4,auto);gap:6px 18px;align-items:center;'>"
- 
-        legend += "<strong>Legend</strong><span></span><span></span>"
- 
-        # Persons (circles)
-        legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:green;margin-right:6px;'></span>Person</span>"
+        # Row 1
         legend += "<span><span style='display:inline-block;width:12px;height:12px;background:grey;border:1px solid #555;margin-right:6px;'></span>House</span>"
         legend += "<span><span style='display:inline-block;width:12px;height:12px;background:orange;border:1px solid #555;margin-right:6px;'></span>Healthcare</span>"
         legend += "<span><span style='display:inline-block;width:12px;height:12px;background:yellow;opacity:0.35;border:1px solid #555;margin-right:6px;'></span>Flood Low</span>"
- 
-        legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:red;margin-right:6px;'></span>Stranded</span>"
+        legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:green;margin-right:6px;'></span>Person</span>"
+
+        # Row 2
         legend += "<span><span style='display:inline-block;width:12px;height:12px;background:purple;border:1px solid #555;margin-right:6px;'></span>Business</span>"
         legend += "<span><span style='display:inline-block;width:12px;height:12px;background:yellow;border:1px solid #555;margin-right:6px;'></span>School</span>"
         legend += "<span><span style='display:inline-block;width:12px;height:12px;background:orange;opacity:0.35;border:1px solid #555;margin-right:6px;'></span>Flood Medium</span>"
- 
-        legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:orange;margin-right:6px;'></span>Injured</span>"
+        legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:red;margin-right:6px;'></span>Stranded</span>"
+
+        # Row 3
         legend += "<span><span style='display:inline-block;width:12px;height:12px;background:magenta;border:1px solid #555;margin-right:6px;'></span>Government</span>"
         legend += "<span><span style='display:inline-block;width:12px;height:12px;background:blue;border:1px solid #555;margin-right:6px;'></span>Shelter</span>"
         legend += "<span><span style='display:inline-block;width:12px;height:12px;background:red;opacity:0.35;border:1px solid #555;margin-right:6px;'></span>Flood High</span>"
- 
+        legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:orange;margin-right:6px;'></span>Injured</span>"
+
+        # Row 4
+        legend += "<span></span><span></span><span></span>"
         legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:black;margin-right:6px;'></span>Deceased</span>"
-        legend += "<span><span style='display:inline-block;width:12px;height:12px;background:orange;border:1px solid #555;margin-right:6px;'></span>Healthcare</span>"
- 
-        legend += "<strong>Network (active)</strong><span></span><span></span><span></span>"
-        legend += "<span><span style='display:inline-block;width:24px;height:3px;background:#1a6faf;margin-right:6px;vertical-align:middle;'></span>Low severity</span>"
-        legend += "<span><span style='display:inline-block;width:24px;height:3px;background:#e07b00;margin-right:6px;vertical-align:middle;'></span>Moderate severity</span>"
-        legend += "<span><span style='display:inline-block;width:24px;height:3px;background:#cc0000;margin-right:6px;vertical-align:middle;'></span>High severity</span>"
-        legend += "<span><span style='display:inline-block;width:24px;height:3px;background:#aaaaaa;margin-right:6px;vertical-align:middle;opacity:0.4;'></span>Inactive reach</span>"
- 
+
+        legend += "</div>"
+
+        # Networks block: 3 columns
+        legend += "<div style='margin-top:10px;'>"
+        legend += "<strong>Networks</strong>"
+        legend += "<div style='margin-top:6px;display:grid;grid-template-columns:repeat(3,auto);gap:6px 24px;align-items:center;'>"
+        legend += "<span><span style='display:inline-block;width:24px;height:3px;background:#b57edc;margin-right:6px;vertical-align:middle;'></span>Merged dam routes</span>"
+        legend += "<span><span style='display:inline-block;width:24px;height:3px;background:#4f81bd;margin-right:6px;vertical-align:middle;'></span>HydroRIVERS</span>"
+        legend += "<span><span style='display:inline-block;width:24px;height:3px;background:#8ecae6;margin-right:6px;vertical-align:middle;'></span>Malolos channels</span>"
+        legend += "</div>"
+        legend += "</div>"
+
+        # Active severity block: 3 columns
+        # legend += "<div style='margin-top:14px;'>"
+        # legend += "<strong>Active flow/severity</strong>"
+        # legend += "<div style='margin-top:6px;display:grid;grid-template-columns:repeat(3,auto);gap:6px 24px;align-items:center;'>"
+        # legend += "<span><span style='display:inline-block;width:24px;height:3px;background:#1a6faf;margin-right:6px;vertical-align:middle;'></span>Low severity</span>"
+        # legend += "<span><span style='display:inline-block;width:24px;height:3px;background:#e07b00;margin-right:6px;vertical-align:middle;'></span>Moderate severity</span>"
+        # legend += "<span><span style='display:inline-block;width:24px;height:3px;background:#cc0000;margin-right:6px;vertical-align:middle;'></span>High severity</span>"
+        # legend += "</div>"
+        # legend += "</div>"
+
         legend += "</div>"
         return legend
 
