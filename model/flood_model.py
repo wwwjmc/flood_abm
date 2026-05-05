@@ -24,6 +24,8 @@ via space.get_total_flood_var_at_position(), which is re-evaluated each step for
 import sys
 import os
 
+from tomlkit import value
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import random
 import pandas as pd
@@ -50,16 +52,24 @@ class FloodModel(Model):
     def __init__(self, N_persons,
                     shelter_cap_limit, healthcare_cap_limit, shelter_funding, healthcare_funding, pre_flood_days, flood_days, post_flood_days, 
                     houses_file, businesses_file, schools_file, shelter_file, healthcare_file, government_file, flood_file_1, flood_file_2, flood_file_3,
-                    dam_scenario_name="S2", dam_scenarios_file=None, merged_dams_file=None, malolos_hydrorivers_file=None, malolos_channels_file=None, model_crs="EPSG:32651"):
+                    dam_scenario_name="S1", dam_scenarios_file=None, merged_dams_file=None, malolos_hydrorivers_file=None, malolos_channels_file=None, model_crs="EPSG:32651"):
             
             super().__init__()
+            random.seed(42)
+            self.random.seed(42)
+            
             self.crs = model_crs
+            self.debug_network = True
 
             self.dam_scenarios_file = dam_scenarios_file
             self.dam_scenarios = pd.read_csv(dam_scenarios_file) if dam_scenarios_file else pd.DataFrame()
 
             # Dam scenario selected from serverrun / batchrun UI
-            self.dam_scenario_name = str(dam_scenario_name).strip() if dam_scenario_name else "S2"
+            self.dam_scenario_name = str(dam_scenario_name).strip() if dam_scenario_name else "S0"
+
+            # River-dam network propagation controls
+            self.hydro_attenuation = 0.85
+            self.hydro_max_downstream_steps = 10
 
             self.dam_scenario_lookup = {}
             if not self.dam_scenarios.empty:
@@ -77,6 +87,12 @@ class FloodModel(Model):
                     ).strip()
                     if key:
                         self.dam_scenario_lookup[key] = row.to_dict()
+                
+                print("\nDam Scenario Lookup Table Loaded:")
+                print("Selected dam scenario:", self.dam_scenario_name)
+                print("Dam scenario lookup:")
+                for dam, values in self.dam_scenario_lookup.items():
+                    print(dam, values)
                         
             # Creation of Spatial Environment
             self.space = StudyArea(
@@ -95,6 +111,72 @@ class FloodModel(Model):
                 malolos_channels_file,
                 model_crs,
             )
+
+            handoff_ids = {
+                self._clean_network_id(getattr(r, "handoff_id", None))
+                for r in self.space.merged_dams
+            }
+            handoff_ids = {x for x in handoff_ids if x}
+
+            hydro_ids = {
+                self._clean_network_id(getattr(r, "reach_id", None))
+                for r in self.space.malolos_hydrorivers
+            }
+            hydro_ids = {x for x in hydro_ids if x}
+
+            missing_handoff_ids = handoff_ids - hydro_ids
+
+            print("\nHandoff ID Validation:")
+            print("Total handoff IDs from merged dams:", len(handoff_ids))
+            print("Total HydroRIVERS reach IDs:", len(hydro_ids))
+            print("Missing handoff IDs:", missing_handoff_ids)
+
+            print("\n================ RAW ID SAMPLE CHECK ================")
+            print("\nMerged dam handoff IDs:")
+            for r in self.space.merged_dams:
+                print(
+                    "reach_id=", repr(getattr(r, "reach_id", None)),
+                    "handoff_id=", repr(getattr(r, "handoff_id", None)),
+                    "dam_name=", repr(getattr(r, "dam_name", None)),
+                    "source_dam=", repr(getattr(r, "source_dam", None)),
+                    "seg_role=", repr(getattr(r, "seg_role", None)),
+                )
+
+            print("\nHydroRIVERS reach IDs:")
+            for r in self.space.malolos_hydrorivers:
+                print(
+                    "reach_id=", repr(getattr(r, "reach_id", None)),
+                    "down_id=", repr(getattr(r, "down_id", None)),
+                )
+
+            print("\nChannel connection IDs:")
+            for ch in self.space.malolos_channels:
+                print(
+                    "channel_id=", repr(getattr(ch, "reach_id", None)),
+                    "name=", repr(getattr(ch, "reach_name", None)),
+                    "con_reach_=", repr(getattr(ch, "con_reach_", None)),
+                )
+
+            print("=====================================================\n")
+
+            channel_con_ids = {
+                self._clean_network_id(getattr(ch, "con_reach_", None))
+                for ch in self.space.malolos_channels
+            }
+            channel_con_ids = {x for x in channel_con_ids if x}
+
+            hydro_ids = {
+                self._clean_network_id(getattr(r, "reach_id", None))
+                for r in self.space.malolos_hydrorivers
+            }
+            hydro_ids = {x for x in hydro_ids if x}
+
+            missing_channel_connections = channel_con_ids - hydro_ids
+
+            print("\nChannel Connection Validation:")
+            print("Total channel con_reach_ IDs:", len(channel_con_ids))
+            print("Total HydroRIVERS reach IDs:", len(hydro_ids))
+            print("Missing channel connection IDs:", missing_channel_connections)
 
             self.num_persons = N_persons
 
@@ -145,7 +227,7 @@ class FloodModel(Model):
                 "Santo Cristo": 2044,
                 "Santo Niño (Pob.)": 661,
                 "Santo Rosario (Pob.)": 6509,
-                "Santos": 8745,
+                "Santor": 8745,
                 "Sumapang Bata": 2577,
                 "Sumapang Matanda": 9166,
                 "Taal": 1799,
@@ -200,7 +282,7 @@ class FloodModel(Model):
                 "Santo Cristo": 59, 
                 "Santo Niño (Pob.)": 17, 
                 "Santo Rosario (Pob.)": 132, 
-                "Santos": 131, 
+                "Santor": 131, 
                 "Sumapang Bata": 49, 
                 "Sumapang Matanda": 134, 
                 "Taal": 50, 
@@ -227,6 +309,7 @@ class FloodModel(Model):
             # -----------------------------------------------------------------------
             
             # Print loaded agent counts for verification
+            print("\nFlood Model - Initialization with the following parameters:")
             print("houses loaded:", len(self.space.houses))
             print("businesses loaded:", len(self.space.businesses))
             print("schools loaded:", len(self.space.schools))
@@ -316,8 +399,8 @@ class FloodModel(Model):
                 brgy = house.barangay
                 self.houses_by_barangay.setdefault(brgy, []).append(house)
             
-            print("Barangays from houses:", list(self.houses_by_barangay.keys())[:10])
-            print("Barangays from population:", list(self.barangay_populations.keys())[:10])
+            print("\nBarangays from houses:", list(self.houses_by_barangay.keys())[::])
+            print("\nBarangays from population:", list(self.barangay_populations.keys())[::])
             
         #-----------------Initialize person agents--------------------------------
             # Create person agents in the model with demographics, wealth classes, and other attributes based on the number of 
@@ -342,8 +425,7 @@ class FloodModel(Model):
             data_collect.data_collection(self)
             print("Persons created:", self.num_persons)
             print("Total scheduled agents:", len(self.schedule.agents)) 
-        
-        
+               
     #-------------------------------Step function------------------------------
     # The step function defines the actions that occur at each time step of the simulation. 
     # It updates the disaster period based on the current time, 
@@ -391,20 +473,17 @@ class FloodModel(Model):
         # 3. Network update: dam route → HydroRIVERS → local channels
         # ------------------------------------------------------------------
         if self.disaster_period == "during_flood":
-            self.update_merged_dam_routes()
-            self.handoff_to_malolos_hydrorivers()
-            self.update_malolos_hydrorivers()
-            self.activate_malolos_channels()
-            self.update_community_hazard()
-        
-        # ------------------------------------------------------------------
-        # 4. Re-evaluate per-agent flood exposure from combined spatial signal.
-        #    This updates current_flood_var on every Person_Agent each step so
-        #    decision_making_module can read the live, network-augmented severity.
-        # ------------------------------------------------------------------  
+            self.update_dynamic_network_hazard()
+
+            if self.debug_network and self.schedule.time == flood_start_time:
+                self.debug_network_state("first flood step")
+
         if self.disaster_period in ("during_flood", "post_flood"):
             self._update_agent_flood_exposure()
-        
+
+            if self.debug_network and self.schedule.time == flood_start_time:
+                self.debug_person_exposure_state("first flood exposure update")
+                
         # ------------------------------------------------------------------
         # 5. Activate all agents
         # ------------------------------------------------------------------
@@ -600,62 +679,157 @@ class FloodModel(Model):
                     agent.geometry, agent_type="house"
                 )
 
+    def debug_person_exposure_state(self, label=""):
+        """
+        Print counts of person agents by current_flood_var.
+        Use this to compare S0, S1, S2, S3.
+        """
+
+        counts = {0: 0, 1: 0, 2: 0, 3: 0}
+
+        for agent in self.schedule.agents:
+            if isinstance(agent, FA.Person_Agent):
+                flood_var = getattr(agent, "current_flood_var", 0)
+                try:
+                    flood_var = int(flood_var)
+                except (TypeError, ValueError):
+                    flood_var = 0
+
+                flood_var = max(0, min(3, flood_var))
+                counts[flood_var] += 1
+
+        print("\n================ PERSON EXPOSURE CHECK ================")
+        print("Label:", label)
+        print("Time:", self.schedule.time)
+        print("Scenario:", self.dam_scenario_name)
+        print("Persons with flood_var 0:", counts[0])
+        print("Persons with flood_var 1:", counts[1])
+        print("Persons with flood_var 2:", counts[2])
+        print("Persons with flood_var 3:", counts[3])
+        print("=======================================================\n")
+
 # ==========================================================================
-# SIMPLE NETWORK UPDATE METHODS
+# RIVER-DAM NETWORK UPDATE METHODS
 # ==========================================================================
 
     def _reset_network_states(self):
         """
-        Zero out runtime state on every network agent before each flood step.
+        Reset runtime flood states on all river-dam network agents.
+
+        This is called at the start of every dynamic network update so that
+        each simulation step recomputes active dam-route, HydroRIVERS, and
+        channel hazard based on the selected dam scenario.
         """
-        for reach in self.space.merged_dams:
+
+        # Reset upstream / merged dam route reaches
+        for reach in getattr(self.space, "merged_dams", []):
             reach.active = False
             reach.current_q = 0.0
             reach.current_stage = 0.0
             reach.current_sev = 0
 
-        for reach in self.space.malolos_hydrorivers:
+        # Reset Malolos HydroRIVERS backbone reaches
+        for reach in getattr(self.space, "malolos_hydrorivers", []):
             reach.active = False
             reach.current_q = 0.0
             reach.current_stage = 0.0
             reach.current_sev = 0
 
-        for ch in self.space.malolos_channels:
+        # Reset local Malolos channels / creeks
+        for ch in getattr(self.space, "malolos_channels", []):
             ch.active = False
             ch.current_stage = 0.0
             ch.current_sev = 0
 
     def update_merged_dam_routes(self):
         """
-        Simple version:
-        - do NOT propagate through down_id
-        - only activate dam entry / handoff reaches
-        - read one severity per dam from the CSV
-        - allow S0 = no effect
+        Activate merged dam-route reaches based on the selected dam scenario.
+
+        This version works with the current merged_dams shapefile, where
+        dam_name/source_dam are missing but seg_role contains values such as:
+        - angat_dam_entry
+        - ipo_dam_entry
+        - bustos_entry
+        - handoff_to_malolos
         """
+
         self._reset_network_states()
 
-        for reach in self.space.merged_dams:
+        for reach in getattr(self.space, "merged_dams", []):
             seg_role = str(getattr(reach, "seg_role", "")).strip().lower()
 
-            if "dam_entry" not in seg_role and seg_role != "handoff":
+            # Keep only dam-entry reaches and the final handoff reach.
+            is_dam_entry = (
+                "dam_entry" in seg_role
+                or "angat" in seg_role
+                or "ipo" in seg_role
+                or "bustos" in seg_role
+            )
+            is_handoff = "handoff" in seg_role
+
+            if not is_dam_entry and not is_handoff:
                 continue
 
-            # Prefer explicit dam_name/source_dam, fall back to is_shared
-            dam_key = str(
-                getattr(reach, "dam_name", None)
-                or getattr(reach, "source_dam", None)
-                or getattr(reach, "is_shared", "")
-            ).strip()
+            # Infer dam identity from seg_role.
+            dam_key = ""
+
+            if "angat" in seg_role:
+                dam_key = "Angat"
+            elif "ipo" in seg_role:
+                dam_key = "Ipo"
+            elif "bustos" in seg_role:
+                dam_key = "Bustos"
+
+            # Special case: shared handoff reach.
+            # It should carry the strongest signal from all active dams.
+            if is_handoff and not dam_key:
+                q_release = 0.0
+                sev = 0
+
+                for key in ["Angat", "Ipo", "Bustos"]:
+                    scenario = self.dam_scenario_lookup.get(key, {})
+
+                    try:
+                        q = float(scenario.get("q_release", 0.0))
+                    except (TypeError, ValueError):
+                        q = 0.0
+
+                    try:
+                        s = int(float(scenario.get("severity", 0)))
+                    except (TypeError, ValueError):
+                        s = 0
+
+                    q_release = max(q_release, q)
+                    sev = max(sev, s)
+
+                sev = max(0, min(3, sev))
+
+                if q_release <= 0 and sev <= 0:
+                    continue
+
+                reach.active = True
+                reach.current_q = q_release
+                reach.current_stage = q_release
+                reach.current_sev = sev
+                continue
+
+            if not dam_key:
+                continue
 
             scenario = self.dam_scenario_lookup.get(dam_key, {})
 
-            q_release = float(scenario.get("q_release", 0.0))
-            sev = int(scenario.get("severity", 0))
+            try:
+                q_release = float(scenario.get("q_release", 0.0))
+            except (TypeError, ValueError):
+                q_release = 0.0
+
+            try:
+                sev = int(float(scenario.get("severity", 0)))
+            except (TypeError, ValueError):
+                sev = 0
 
             sev = max(0, min(3, sev))
 
-            # True baseline / no-effect scenario
             if q_release <= 0 and sev <= 0:
                 continue
 
@@ -666,60 +840,191 @@ class FloodModel(Model):
 
     def handoff_to_malolos_hydrorivers(self):
         """
-        Simple handoff:
-        - if a merged dam route is active
-        - and it has a handoff_id
-        - activate the matching HydroRIVERS reach
+        Transfer active merged dam-route signal to matching Malolos HydroRIVERS reach.
+
+        Logic:
+        - Find active merged dam-route reaches.
+        - Read each route's handoff_id.
+        - Match handoff_id to HydroRIVERS reach_id.
+        - Transfer q, stage, and severity.
         """
+
+        # Create an index of Malolos HydroRIVERS reaches by their reach_id for quick lookup during handoff.
         hydro_index = {
-            str(getattr(r, "reach_id", "")).strip(): r
-            for r in self.space.malolos_hydrorivers
+            self._clean_network_id(getattr(r, "reach_id", None)): r
+            for r in getattr(self.space, "malolos_hydrorivers", [])
+            if self._clean_network_id(getattr(r, "reach_id", None))
         }
 
-        for route in self.space.merged_dams:
+        # 
+        for route in getattr(self.space, "merged_dams", []):
             if not getattr(route, "active", False):
                 continue
 
-            handoff_id = str(getattr(route, "handoff_id", "")).strip()
+            handoff_id = self._clean_network_id(getattr(route, "handoff_id", None))
+
             if not handoff_id:
                 continue
 
             if handoff_id not in hydro_index:
+                print(f"Warning: handoff_id {handoff_id} not found in Malolos HydroRIVERS.")
                 continue
-            
+
             hr = hydro_index[handoff_id]
+
             hr.active = True
-            hr.current_q = max(getattr(hr, "current_q", 0.0), getattr(route, "current_q", 0.0))
-            hr.current_stage = max(getattr(hr, "current_stage", 0.0), getattr(route, "current_stage", 0.0))
-            hr.current_sev = max(getattr(hr, "current_sev", 0), getattr(route, "current_sev", 0))
+            hr.current_q = max(
+                getattr(hr, "current_q", 0.0),
+                getattr(route, "current_q", 0.0)
+            )
+            hr.current_stage = max(
+                getattr(hr, "current_stage", 0.0),
+                getattr(route, "current_stage", 0.0)
+            )
+            hr.current_sev = max(
+                getattr(hr, "current_sev", 0),
+                getattr(route, "current_sev", 0)
+            )
 
     def update_malolos_hydrorivers(self):
         """
-        Simple version:
-        - no downstream propagation through down_id yet
-        - keep only handoff-received active HydroRIVERS reaches
+        Propagate active hazard downstream through the Malolos HydroRIVERS backbone.
+
+        This method starts from HydroRIVERS reaches that were activated by
+        handoff_to_malolos_hydrorivers(), then follows reach_id -> down_id
+        connectivity to activate downstream HydroRIVERS reaches.
+
+        Required attributes:
+        - MalolosHydroRiver.reach_id
+        - MalolosHydroRiver.down_id
+        - MalolosHydroRiver.active
+        - MalolosHydroRiver.current_q
+        - MalolosHydroRiver.current_stage
+        - MalolosHydroRiver.current_sev
         """
-        pass
+
+        # Build lookup: reach_id -> HydroRIVER agent
+        hydro_index = {
+            self._clean_network_id(getattr(r, "reach_id", None)): r
+            for r in getattr(self.space, "malolos_hydrorivers", [])
+            if self._clean_network_id(getattr(r, "reach_id", None))
+        }
+
+        # Starting reaches are those activated by the merged dam handoff
+        starting_reaches = [
+            r for r in getattr(self.space, "malolos_hydrorivers", [])
+            if getattr(r, "active", False)
+        ]
+
+        # Propagation controls
+        attenuation = getattr(self, "hydro_attenuation", 0.85)
+        max_steps = getattr(self, "hydro_max_downstream_steps", 10)
+
+        try:
+            attenuation = float(attenuation)
+        except (TypeError, ValueError):
+            attenuation = 0.85
+
+        try:
+            max_steps = int(max_steps)
+        except (TypeError, ValueError):
+            max_steps = 10
+
+        attenuation = max(0.0, min(1.0, attenuation))
+        max_steps = max(1, max_steps)
+
+        # Propagate from each active handoff reach downstream
+        for start_reach in starting_reaches:
+            current = start_reach
+
+            current_q = getattr(start_reach, "current_q", 0.0)
+            current_stage = getattr(start_reach, "current_stage", 0.0)
+            current_sev = getattr(start_reach, "current_sev", 0)
+
+            visited = set()
+
+            for _ in range(max_steps):
+                current_id = self._clean_network_id(getattr(current, "reach_id", None))
+
+                if not current_id:
+                    break
+
+                if current_id in visited:
+                    print(f"Warning: loop detected in Malolos HydroRIVERS at reach_id {current_id}.")
+                    break
+
+                visited.add(current_id)
+
+                down_id = self._clean_network_id(getattr(current, "down_id", None))
+
+                if not down_id:
+                    break
+
+                if down_id not in hydro_index:
+                    break
+
+                downstream = hydro_index[down_id]
+
+                # Attenuate the signal before assigning it downstream
+                current_q *= attenuation
+                current_stage *= attenuation
+
+                if current_sev > 0:
+                    propagated_sev = max(1, round(current_sev * attenuation))
+                else:
+                    propagated_sev = 0
+
+                # Activate downstream reach
+                downstream.active = True
+                downstream.current_q = max(
+                    getattr(downstream, "current_q", 0.0),
+                    current_q
+                )
+                downstream.current_stage = max(
+                    getattr(downstream, "current_stage", 0.0),
+                    current_stage
+                )
+                downstream.current_sev = max(
+                    getattr(downstream, "current_sev", 0),
+                    propagated_sev
+                )
+
+                # Continue downstream
+                current = downstream
+                current_sev = propagated_sev
 
     def activate_malolos_channels(self):
         """
-        Simple channel activation:
-        - if a channel's con_reach_ matches an active HydroRIVERS reach
-        - channel inherits that reach's severity
-        - optional transfer_factor can reduce inherited stage/severity
+        Activate Malolos local channels from:
+        1. active HydroRIVERS reaches through con_reach_
+        2. already-active local channels through the connection field
+
+        Direct HydroRIVERS connection:
+            MalolosChannel.con_reach_ == MalolosHydroRiver.reach_id
+
+        Local channel connection:
+            MalolosChannel.connection == active MalolosChannel.reach_name
+            or MalolosChannel.connection == active MalolosChannel.reach_id
         """
+
+        # ------------------------------------------------------------
+        # 1. Activate channels directly connected to active HydroRIVERS
+        # ------------------------------------------------------------
         active_hydro = {
-            str(getattr(r, "reach_id", "")).strip(): r
-            for r in self.space.malolos_hydrorivers
+            self._clean_network_id(getattr(r, "reach_id", None)): r
+            for r in getattr(self.space, "malolos_hydrorivers", [])
             if getattr(r, "active", False)
+            and self._clean_network_id(getattr(r, "reach_id", None))
         }
 
-        for ch in self.space.malolos_channels:
+        for ch in getattr(self.space, "malolos_channels", []):
             inherits_hazard = getattr(ch, "inherits_hazard", True)
-            if str(inherits_hazard).lower() in ("false", "0", "no", "n"):
+
+            if str(inherits_hazard).strip().lower() in ("false", "0", "no", "n"):
                 continue
 
-            con_id = str(getattr(ch, "con_reach_", "")).strip()
+            con_id = self._clean_network_id(getattr(ch, "con_reach_", None))
+
             if not con_id or con_id not in active_hydro:
                 continue
 
@@ -732,30 +1037,201 @@ class FloodModel(Model):
 
             transfer_factor = max(0.0, min(1.0, transfer_factor))
 
-            ch.active = True
-            ch.current_stage = getattr(source, "current_stage", 0.0) * transfer_factor
+            source_stage = getattr(source, "current_stage", 0.0)
+            source_sev = getattr(source, "current_sev", 0)
 
-            inherited_sev = round(getattr(source, "current_sev", 0) * transfer_factor)
-            if getattr(source, "current_sev", 0) > 0:
+            ch.active = True
+            ch.current_stage = max(
+                getattr(ch, "current_stage", 0.0),
+                source_stage * transfer_factor
+            )
+
+            inherited_sev = round(source_sev * transfer_factor)
+
+            if source_sev > 0:
                 inherited_sev = max(1, inherited_sev)
 
-            ch.current_sev = max(getattr(ch, "current_sev", 0), inherited_sev)
+            inherited_sev = max(0, min(3, inherited_sev))
 
-    def update_community_hazard(self):
+            ch.current_sev = max(
+                getattr(ch, "current_sev", 0),
+                inherited_sev
+            )
+
+        # ------------------------------------------------------------
+        # 2. Propagate from active local channels to connected channels
+        # ------------------------------------------------------------
+        max_channel_steps = getattr(self, "channel_max_steps", 5)
+        channel_attenuation = getattr(self, "channel_attenuation", 0.90)
+
+        try:
+            max_channel_steps = int(max_channel_steps)
+        except (TypeError, ValueError):
+            max_channel_steps = 5
+
+        try:
+            channel_attenuation = float(channel_attenuation)
+        except (TypeError, ValueError):
+            channel_attenuation = 0.90
+
+        max_channel_steps = max(1, max_channel_steps)
+        channel_attenuation = max(0.0, min(1.0, channel_attenuation))
+
+        for _ in range(max_channel_steps):
+            changed = False
+
+            active_channels = [
+                ch for ch in getattr(self.space, "malolos_channels", [])
+                if getattr(ch, "active", False)
+            ]
+
+            active_channel_ids = {
+                self._clean_network_id(getattr(ch, "reach_id", None)): ch
+                for ch in active_channels
+                if self._clean_network_id(getattr(ch, "reach_id", None))
+            }
+
+            active_channel_names = {
+                str(getattr(ch, "reach_name", "")).strip().lower(): ch
+                for ch in active_channels
+                if str(getattr(ch, "reach_name", "")).strip()
+            }
+
+            for ch in getattr(self.space, "malolos_channels", []):
+                if getattr(ch, "active", False):
+                    continue
+
+                connection_raw = getattr(ch, "connection", None)
+                connection_id = self._clean_network_id(connection_raw)
+                connection_name = str(connection_raw).strip().lower()
+
+                source = None
+
+                if connection_id in active_channel_ids:
+                    source = active_channel_ids[connection_id]
+                elif connection_name in active_channel_names:
+                    source = active_channel_names[connection_name]
+
+                if source is None:
+                    continue
+
+                source_stage = getattr(source, "current_stage", 0.0)
+                source_sev = getattr(source, "current_sev", 0)
+
+                if source_sev <= 0:
+                    continue
+
+                inherited_stage = source_stage * channel_attenuation
+                inherited_sev = max(1, round(source_sev * channel_attenuation))
+                inherited_sev = max(0, min(3, inherited_sev))
+
+                ch.active = True
+                ch.current_stage = inherited_stage
+                ch.current_sev = inherited_sev
+
+                changed = True
+
+            if not changed:
+                break
+
+    def update_dynamic_network_hazard(self):
         """
-        Optional helper:
-        If you later add community/barangay polygon agents to self.space.communities,
-        this computes a simple centroid-based dynamic hazard for each polygon.
+        Full river-dam network update sequence.
+
+        This updates runtime active/current_sev/current_stage values on:
+        - merged dam routes
+        - Malolos HydroRIVERS
+        - Malolos local channels
+
+        The actual location-based hazard query is handled by flood_space.py
+        through self.space.get_total_flood_var_at_position().
         """
-        if not hasattr(self.space, "communities"):
-            return
 
-        for comm in self.space.communities:
-            try:
-                comm.current_flood_var = self.space.get_total_flood_var_at_position(comm.geometry.centroid)
-            except Exception:
-                comm.current_flood_var = 0
+        self.update_merged_dam_routes()
+        self.handoff_to_malolos_hydrorivers()
+        self.update_malolos_hydrorivers()
+        self.activate_malolos_channels()
 
+    # Debug method to print the current state of the river-dam network agents
+    def debug_network_state(self, label=""):
+        """
+        Print summary counts of active river-dam network agents.
+        Use this to check whether each dam scenario changes the network state.
+        """
+
+        active_dam_routes = [
+            r for r in getattr(self.space, "merged_dams", [])
+            if getattr(r, "active", False)
+        ]
+
+        active_hydrorivers = [
+            r for r in getattr(self.space, "malolos_hydrorivers", [])
+            if getattr(r, "active", False)
+        ]
+
+        active_channels = [
+            ch for ch in getattr(self.space, "malolos_channels", [])
+            if getattr(ch, "active", False)
+        ]
+
+        max_dam_sev = max(
+            [getattr(r, "current_sev", 0) for r in active_dam_routes],
+            default=0
+        )
+
+        max_hydro_sev = max(
+            [getattr(r, "current_sev", 0) for r in active_hydrorivers],
+            default=0
+        )
+
+        max_channel_sev = max(
+            [getattr(ch, "current_sev", 0) for ch in active_channels],
+            default=0
+        )
+
+        print("\n================ NETWORK STATE CHECK ================")
+        print("Label:", label)
+        print("Time:", self.schedule.time)
+        print("Disaster period:", self.disaster_period)
+        print("Scenario:", self.dam_scenario_name)
+        print("Active merged dam routes:", len(active_dam_routes))
+        print("Active HydroRIVERS reaches:", len(active_hydrorivers))
+        print("Active local channels:", len(active_channels))
+        print("Max dam route severity:", max_dam_sev)
+        print("Max HydroRIVERS severity:", max_hydro_sev)
+        print("Max local channel severity:", max_channel_sev)
+
+        print("\nSample active dam routes:")
+        for r in active_dam_routes[:5]:
+            print(
+                "reach_id=", getattr(r, "reach_id", None),
+                "dam_name=", getattr(r, "dam_name", None),
+                "source_dam=", getattr(r, "source_dam", None),
+                "is_shared=", getattr(r, "is_shared", None),
+                "handoff_id=", getattr(r, "handoff_id", None),
+                "q=", getattr(r, "current_q", None),
+                "sev=", getattr(r, "current_sev", None),
+            )
+
+        print("\nSample active HydroRIVERS:")
+        for r in active_hydrorivers[:5]:
+            print(
+                "reach_id=", getattr(r, "reach_id", None),
+                "down_id=", getattr(r, "down_id", None),
+                "q=", getattr(r, "current_q", None),
+                "sev=", getattr(r, "current_sev", None),
+            )
+
+        print("\nSample active local channels:")
+        for ch in active_channels[:5]:
+            print(
+                "reach_id=", getattr(ch, "reach_id", None),
+                "name=", getattr(ch, "reach_name", None),
+                "con_reach_=", getattr(ch, "con_reach_", None),
+                "sev=", getattr(ch, "current_sev", None),
+            )
+
+        print("=====================================================\n")
 
     def compute_barangay_stats(self):
         stats = defaultdict(lambda: {
@@ -778,3 +1254,31 @@ class FloodModel(Model):
                 if not getattr(agent, "alive", True):
                     stats[brgy]["dead"] += 1
         return dict(stats)
+    
+    def _clean_network_id(self, value):
+        """
+        Convert network IDs into comparable string IDs.
+
+        Examples:
+        - np.int64(50012742)      -> "50012742"
+        - np.float64(50012742.0)  -> "50012742"
+        - "50012742.0"            -> "50012742"
+        - nan                     -> ""
+        """
+
+        if value is None:
+            return ""
+
+        text = str(value).strip()
+
+        if text.lower() in ("", "nan", "none", "null"):
+            return ""
+
+        try:
+            number = float(text)
+            if number.is_integer():
+                return str(int(number))
+        except (TypeError, ValueError):
+            pass
+
+        return text

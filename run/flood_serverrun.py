@@ -71,7 +71,6 @@ def agent_portrayal(agent):
 
     # Portayal for flood areas based on severity        
     elif isinstance(agent, FloodArea):
-        print("Rendering FloodArea:", agent.var_value, agent.flood_file)
         if agent.var_value == 1:
             portrayal["color"] = "Yellow"
             portrayal["fillColor"] = "Yellow"

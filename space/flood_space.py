@@ -75,6 +75,7 @@ class StudyArea(mg.GeoSpace):
         # -----------------------------------------------------------------------
 
         # Load all spatial files agents from GIS files and convert to model CRS
+        print("\nFlood Space - Loading Entity Agents Log")
         self._load_entity_agents_from_file(model, houses_file, FA.House_Agent, "houses", crs)
         self._load_entity_agents_from_file(model, businesses_file, FA.Business_Agent, "businesses", crs)
         self._load_entity_agents_from_file(model, schools_file, FA.School_Agent, "schools", crs)
@@ -87,6 +88,7 @@ class StudyArea(mg.GeoSpace):
         # Flood areas are loaded with var_value set to their actual Var field value.
         # The model masks/reveals them each step via add_flood_maps / remove_flood_maps.
         # -------------------------------------------------------------------------
+        print("\nFlood Space - Flood Maps Loading Log")
         self.flood_file_1 = flood_file_1
         self.flood_file_2 = flood_file_2
         self.flood_file_3 = flood_file_3
@@ -95,6 +97,7 @@ class StudyArea(mg.GeoSpace):
         self._load_flood_maps_from_file(model, flood_file_3, crs)
 
         # Load the new river/dam connectivity layers
+        print("\nFlood Space - Loading River-Dam Network Log")
         self._load_network_agents_from_file(model, merged_dams_file, MergedDamRoute, "merged_dams", crs)
         self._load_network_agents_from_file(model, malolos_hydrorivers_file, MalolosHydroRiver, "malolos_hydrorivers", crs)
         self._load_network_agents_from_file(model, malolos_channels_file, MalolosChannel, "malolos_channels", crs)
@@ -133,10 +136,10 @@ class StudyArea(mg.GeoSpace):
             for agent in self.malolos_hydrorivers
             if getattr(agent, "reach_id", None) is not None
         }
-
-        print(f"Merged dam route reaches loaded: {len(self.merged_dams)}")
-        print(f"Malolos HydroRIVERS reaches loaded: {len(self.malolos_hydrorivers)}")
-        print(f"Malolos local channels loaded: {len(self.malolos_channels)}")
+        # print("\nRiver-Dam Network Loaded from Flood Space:")
+        # print(f"Merged dam route reaches loaded: {len(self.merged_dams)}")
+        # print(f"Malolos HydroRIVERS reaches loaded: {len(self.malolos_hydrorivers)}")
+        # print(f"Malolos local channels loaded: {len(self.malolos_channels)}")
 
  
 # ==========================================================================
@@ -488,19 +491,29 @@ class StudyArea(mg.GeoSpace):
     def get_total_flood_var_at_position(self, position):
         """
         Combined flood severity:
-
-            total = min(3, base_var + river_increment + channel_increment)
-
-        The river and channel layers act as amplifiers, not full replacements
-        of the static flood map.
+        static flood map + scaled network increments.
         """
+
         base_var = self.get_flood_var_at_position(position)
         backbone_bonus = self.get_malolos_backbone_bonus_at_position(position)
         local_bonus = self.get_local_channel_bonus_at_position(position)
 
-        # Convert network bonus into small increments so the flood map remains primary
-        river_increment = 1 if backbone_bonus >= 2 else 0
-        channel_increment = 1 if local_bonus >= 1 else 0
+        river_increment = 0
+        channel_increment = 0
+
+        # HydroRIVERS only increases hazard at moderate or high severity
+        if backbone_bonus == 2:
+            river_increment = 1
+        elif backbone_bonus == 3:
+            river_increment = 1
+
+        # Local channels can affect exposure more directly
+        if local_bonus == 1:
+            channel_increment = 1
+        elif local_bonus == 2:
+            channel_increment = 1
+        elif local_bonus == 3:
+            channel_increment = 2
 
         return min(3, base_var + river_increment + channel_increment)
  
