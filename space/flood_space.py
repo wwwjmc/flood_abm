@@ -432,11 +432,14 @@ class StudyArea(mg.GeoSpace):
 
     def get_malolos_backbone_bonus_at_position(self, position):
         """
-        Simple HydroRIVERS bonus:
-        - full bonus if within 50 m
-        - lower bonus if within 100 m
-        - no bonus beyond 100 m
+        HydroRIVERS proximity bonus with severity-scaled influence distance.
+
+        Higher network severity affects a wider area:
+        - severity 1: 50 m full, 100 m reduced
+        - severity 2: 75 m full, 150 m reduced
+        - severity 3: 100 m full, 200 m reduced
         """
+
         position_point = self._normalize_to_point(position)
         bonus = 0
 
@@ -447,23 +450,41 @@ class StudyArea(mg.GeoSpace):
             try:
                 dist = reach.geometry.distance(position_point)
                 sev = int(getattr(reach, "current_sev", 0))
-
-                if dist <= 50:
-                    bonus = max(bonus, sev)
-                elif dist <= 100 and sev > 1:
-                    bonus = max(bonus, sev - 1)
             except Exception:
                 continue
+
+            sev = max(0, min(3, sev))
+
+            if sev <= 0:
+                continue
+
+            if sev == 1:
+                full_dist = 50
+                reduced_dist = 100
+            elif sev == 2:
+                full_dist = 75
+                reduced_dist = 150
+            else:
+                full_dist = 100
+                reduced_dist = 200
+
+            if dist <= full_dist:
+                bonus = max(bonus, sev)
+            elif dist <= reduced_dist and sev > 1:
+                bonus = max(bonus, sev - 1)
 
         return max(0, min(3, bonus))
 
     def get_local_channel_bonus_at_position(self, position):
         """
-        Simple local channel bonus:
-        - full bonus if within 25 m
-        - lower bonus if within 75 m
-        - no bonus beyond 75 m
+        Local channel proximity bonus with severity-scaled influence distance.
+
+        Higher channel severity affects a wider area:
+        - severity 1: 25 m full, 75 m reduced
+        - severity 2: 50 m full, 100 m reduced
+        - severity 3: 75 m full, 150 m reduced
         """
+
         position_point = self._normalize_to_point(position)
         bonus = 0
 
@@ -474,13 +495,28 @@ class StudyArea(mg.GeoSpace):
             try:
                 dist = channel.geometry.distance(position_point)
                 sev = int(getattr(channel, "current_sev", 0))
-
-                if dist <= 25:
-                    bonus = max(bonus, sev)
-                elif dist <= 75 and sev > 1:
-                    bonus = max(bonus, sev - 1)
             except Exception:
                 continue
+
+            sev = max(0, min(3, sev))
+
+            if sev <= 0:
+                continue
+
+            if sev == 1:
+                full_dist = 25
+                reduced_dist = 75
+            elif sev == 2:
+                full_dist = 50
+                reduced_dist = 100
+            else:
+                full_dist = 75
+                reduced_dist = 150
+
+            if dist <= full_dist:
+                bonus = max(bonus, sev)
+            elif dist <= reduced_dist and sev > 1:
+                bonus = max(bonus, sev - 1)
 
         return max(0, min(3, bonus))
 

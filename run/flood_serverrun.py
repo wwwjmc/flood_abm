@@ -275,7 +275,7 @@ model_params = {
 
     "dam_scenario_name": Choice(
         "Dam scenario",
-        value="S2",
+        value="S0",
         choices=["S0", "S1", "S2", "S3"],
     ),
 }
