@@ -89,7 +89,7 @@ for scenario in ["S3"]:
     results = batch_run(
         FloodModel,
         params,
-        iterations=1,
+        iterations=2,
         max_steps=24 * 38,
         number_processes=1,
         data_collection_period=1,

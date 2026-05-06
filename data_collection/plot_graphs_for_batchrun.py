@@ -10,7 +10,7 @@ warnings.filterwarnings("ignore", category=FutureWarning, module="seaborn")
 # ========================= Settings ========================= #
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 CSV_DIR = os.path.join(PROJECT_DIR, "..", "run", "data_collection")
-OUTPUT_DIR = os.path.join(PROJECT_DIR, "graphs")
+OUTPUT_DIR = os.path.join(PROJECT_DIR, "graphs_steps")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Use "S0", "S1", "S2", "S3", or None.
@@ -318,9 +318,9 @@ plot_multi_line_graph(
         "Death": "black",
     },
     x_range=(0, 38),
-    y_range=(0, 0.3),
+    y_range=(0, 0.045),
     x_interval=7,
-    y_interval=0.1
+    y_interval=0.005
 )
 
 # 3) Entity Effects
@@ -340,9 +340,9 @@ plot_multi_line_graph(
         "Schools_Flooded": "orange",
     },
     x_range=(0, 38),
-    y_range=(0, 0.8),
+    y_range=(0, 0.09),
     x_interval=7,
-    y_interval=0.2
+    y_interval=0.025
 )
 
 # 4) SES vulnerability charts
@@ -366,7 +366,7 @@ ses_group_specs = [
             "stranded_SES_1_0_0.3": "High SES (low-vulnerability)",
             "stranded_SES_1_0.7_1": "Low SES (high-vulnerability)",
         },
-        "y_range": (0, 0.3),
+        "y_range": (0, 0.5),
         "plot_title": "Stranded Population by Vulnerability Group",
     },
     {
@@ -441,8 +441,8 @@ decision_groups = [
             "CRT": "CRT_preflood_non_evacuation_measure_implemented_SES_1_0.7_1",
         },
         "y_label": "Proportion of high-vulnerability agents",
-        "x_range": (7, 14.1),
-        "y_range": (0, 0.2),
+        "x_range": (0, 38.2),
+        "y_range": (0, 0.5),
         "x_interval": 7,
         "y_interval": 0.05,
         "phase_label": "Pre-flood Non-Evacuation",
@@ -457,13 +457,14 @@ decision_groups = [
             "CRT": "CRT_preflood_non_evacuation_measure_implemented_SES_1_0_0.3",
         },
         "y_label": "Proportion of low-vulnerability agents",
-        "x_range": (7, 14.1),
-        "y_range": (0, 0.04),
+        "x_range": (0, 38.2),
+        "y_range": (0, 0.03),
         "x_interval": 7,
-        "y_interval": 0.025,
+        "y_interval": 0.01,
         "phase_label": "Pre-flood Non-Evacuation",
         "group_label": "of Low-Vulnerability Agents",
     },
+    
     {
         "save_prefix": "evac_low_dec",
         "columns": {
@@ -473,13 +474,14 @@ decision_groups = [
             "CRT": "CRT_evacuation_SES_1_0_0.3",
         },
         "y_label": "Proportion of low-vulnerability agents",
-        "x_range": (7, 24.1),
-        "y_range": (0, 0.21),
+        "x_range": (0, 38.2),
+        "y_range": (0, 0.03),
         "x_interval": 7,
-        "y_interval": 0.07,
+        "y_interval": 0.025,
         "phase_label": "Evacuation",
         "group_label": "of Low-Vulnerability Agents",
     },
+    # OK
     {
         "save_prefix": "evac_high_dec",
         "columns": {
@@ -489,13 +491,14 @@ decision_groups = [
             "CRT": "CRT_evacuation_SES_1_0.7_1",
         },
         "y_label": "Proportion of high-vulnerability agents",
-        "x_range": (7, 24.1),
-        "y_range": (0, 0.21),
+        "x_range": (0, 38.2),
+        "y_range": (0, 0.6),
         "x_interval": 7,
-        "y_interval": 0.07,
+        "y_interval": 0.05,
         "phase_label": "Evacuation",
         "group_label": "of High-Vulnerability Agents",
     },
+    # CHECKKK
     {
         "save_prefix": "during_low_dec",
         "columns": {
@@ -505,13 +508,14 @@ decision_groups = [
             "CRT": "CRT_duringflood_coping_action_implemented_SES_1_0_0.3",
         },
         "y_label": "Proportion of low-vulnerability agents",
-        "x_range": (14, 24.1),
-        "y_range": (0, 0.04),
+        "x_range": (0, 38.2),
+        "y_range": (0, 0.03),
         "x_interval": 7,
-        "y_interval": 0.01,
+        "y_interval": 0.006,
         "phase_label": "During-flood Coping",
         "group_label": "of Low-Vulnerability Agents",
     },
+    # CHECK
     {
         "save_prefix": "during_high_dec",
         "columns": {
@@ -521,13 +525,14 @@ decision_groups = [
             "CRT": "CRT_duringflood_coping_action_implemented_SES_1_0.7_1",
         },
         "y_label": "Proportion of high-vulnerability agents",
-        "x_range": (14, 24.1),
-        "y_range": (0, 0.08),
+        "x_range": (0, 38.2),
+        "y_range": (0, 0.2),
         "x_interval": 7,
-        "y_interval": 0.02,
+        "y_interval": 0.05,
         "phase_label": "During-flood Coping",
         "group_label": "of High-Vulnerability Agents",
     },
+        # OK
     {
         "save_prefix": "post_low_dec",
         "columns": {
@@ -537,13 +542,14 @@ decision_groups = [
             "CRT": "CRT_postflood_adaptation_measures_planned_SES_1_0_0.3",
         },
         "y_label": "Proportion of low-vulnerability agents",
-        "x_range": (24, 38.2),
+        "x_range": (0, 38.2),
         "y_range": (0, 0.05),
         "x_interval": 7,
-        "y_interval": 0.01,
+        "y_interval": 0.0125,
         "phase_label": "Post-flood Adaptation",
         "group_label": "of Low-Vulnerability Agents",
     },
+    # OK
     {
         "save_prefix": "post_high_dec",
         "columns": {
@@ -553,8 +559,8 @@ decision_groups = [
             "CRT": "CRT_postflood_adaptation_measures_planned_SES_1_0.7_1",
         },
         "y_label": "Proportion of high-vulnerability agents",
-        "x_range": (24, 38.2),
-        "y_range": (0, 0.15),
+        "x_range": (0, 38.2),
+        "y_range": (0, 0.3),
         "x_interval": 7,
         "y_interval": 0.05,
         "phase_label": "Post-flood Adaptation",
