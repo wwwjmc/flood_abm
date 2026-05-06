@@ -1,447 +1,524 @@
 """
-Server Run Script
+Batch Run Results Visualization Script
 
-This script launches an interactive visualization of the flood model, 
-allowing real-time observation of agent behaviors, decisions, and flood impacts 
-through a web interface.
+Purpose
+-------
+Generate batch-run output graphs that match the chart categories used in
+flood_serverrun.py / the pasted serverrun chart setup, while keeping graphs
+simple and readable.
+
+Serverrun chart categories matched here:
+    1. Decisions chart
+    2. Persons chart
+    3. Entities chart
+    4. Economic chart
+    5. Decision-theory charts by phase and SES range
+    6. Grouped SES outcome charts for SES index 1 and SES index 2
+
+Decision-theory colors:
+    PMT = blue
+    TPB = orange
+    SCT = green
+    CRT = red
+
+Input CSVs expected:
+    Preferred:
+        ../run/data_collection/results_S0.csv
+        ../run/data_collection/results_S1.csv
+        ../run/data_collection/results_S2.csv
+        ../run/data_collection/results_S3.csv
+
+    Fallback:
+        batchrun_results.csv in the same folder as this script
 
 Output:
-Interactive visualization accessible via a web browser and data saved in 
-  data_collection/serverrun_results.csv
+    PNG graphs saved in ./data_collection/serverrun_matched_graphs
 """
 
-import sys
 import os
-
-from matplotlib import legend
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-import agents.flood_agents as FA
-from model.flood_model import FloodModel
-from space.flood_space import FloodArea, MergedDamRoute, MalolosHydroRiver, MalolosChannel
-
-import mesa_geo as mg
-from mesa.visualization import Choice, ModularServer
-from mesa.visualization.modules import ChartModule, TextElement
-from mesa.visualization import Slider
-
-try:
-    from mesa.visualization import StaticText
-except ImportError:
-    try:
-        from mesa.visualization.UserParam import UserSettableParameter
-
-        def StaticText(name, value=""):
-            return UserSettableParameter("static_text", name, value=value)
-    except Exception:
-        StaticText = None
-    
 import warnings
-import psutil
-import xyzservices.providers as xyz
 
-# Suppress the specific FutureWarning
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 warnings.filterwarnings("ignore", category=FutureWarning, module="seaborn")
 
-# Function to get memory and CPU usage
-def get_resource_usage():
-    process = psutil.Process()
-    memory_usage = process.memory_info().rss / (1024 ** 2)  # Convert to MB
-    cpu_usage = process.cpu_percent(interval=None)  # CPU usage as a percentage
-    return memory_usage, cpu_usage
+# ========================= Settings ========================= #
 
-#========================== Launch to server observe ======================
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+CSV_DIR = os.path.join(PROJECT_DIR, "..", "run", "data_collection")
+OUTPUT_DIR = os.path.join(PROJECT_DIR, "data_collection", "serverrun_matched_graphs")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-#Polygon representation in map
-def agent_portrayal(agent):
-    portrayal = {}
+# Use "S0", "S1", "S2", "S3", or None.
+# Use "S3" to match your current serverrun default dam scenario.
+TARGET_SCENARIO = "S3"
 
-    # Portrayal for person agents based on their status (stranded, injured, deceased)
-    if isinstance(agent, FA.Person_Agent):
-        portrayal["color"] = "Green"
-        portrayal["radius"] = "3"
-        portrayal["fillOpacity"] = 1
-        
-        if agent.stranded:
-            portrayal["color"] = "Red"
-        elif not agent.alive:
-            portrayal["color"] = "Black"
-        elif agent.injured:
-            portrayal["color"] = "Orange"
+# Your model uses hourly steps; batch plots are easier to read in days.
+CONVERT_STEP_TO_DAYS = True
 
-    # Portayal for flood areas based on severity        
-    elif isinstance(agent, FloodArea):
-        if agent.var_value == 1:
-            portrayal["color"] = "Yellow"
-            portrayal["fillColor"] = "Yellow"
-        elif agent.var_value == 2:
-            portrayal["color"] = "Orange"
-            portrayal["fillColor"] = "Orange"
-        elif agent.var_value == 3:
-            portrayal["color"] = "Red"
-            portrayal["fillColor"] = "Red"
-        else:  # var_value == 0 or unknown
-            portrayal["color"] = "#95253400"
-            portrayal["fillColor"] = "#95253400"
-            portrayal["weight"] = 0
-            portrayal["fillOpacity"] = 0   # fully invisible
-            portrayal["opacity"] = 0       # hide border too
-
-        portrayal["weight"] = 1
-        portrayal["fillOpacity"] = 0.35
-        portrayal["opacity"] = 0.6
-
-    # Portrayal for other entities    
-    elif isinstance(agent, FA.Business_Agent):
-        portrayal["color"] = "Purple"
-
-    elif isinstance(agent, FA.House_Agent):
-        portrayal["color"] = "#952534"
-        portrayal["weight"] = 0.3
-        portrayal["fillOpacity"] = 0.6
-    
-    elif isinstance(agent, FA.School_Agent):
-        portrayal["color"] = "Yellow"
-    
-    elif isinstance(agent, FA.Shelter_Agent):
-        portrayal["color"] = "Blue"
-    
-    elif isinstance(agent, FA.Healthcare_Agent):
-        portrayal["color"] = "Orange"
-    
-    elif isinstance(agent, FA.Government_Agent):
-        portrayal["color"] = "Magenta"   
-    
-    # -----------------------------------------------------------------------
-    # Network layer portrayals
-    # Lines shown only when the reach is active (carrying flow this step).
-    # Color encodes severity: blue=low, orange=moderate, red=high.
-    # Inactive reaches are rendered very faintly so the map stays readable.
-    # -----------------------------------------------------------------------
-    elif isinstance(agent, MergedDamRoute):
-        sev = getattr(agent, "current_sev", 0)
-        active = getattr(agent, "active", False)
-
-        if active:
-            portrayal["color"] = "#7a00cc" if sev <= 1 else ("#e07b00" if sev == 2 else "#cc0000")
-            portrayal["weight"] = 4
-            portrayal["opacity"] = 0.95
-        else:
-            # always visible background route
-            portrayal["color"] = "#b57edc"
-            portrayal["weight"] = 2.2
-            portrayal["opacity"] = 0.55
-
-    elif isinstance(agent, MalolosHydroRiver):
-        sev = getattr(agent, "current_sev", 0)
-        active = getattr(agent, "active", False)
-
-        if active:
-            portrayal["color"] = "#1a6faf" if sev <= 1 else ("#e07b00" if sev == 2 else "#cc0000")
-            portrayal["weight"] = 4
-            portrayal["opacity"] = 0.95
-        else:
-            # always visible main river backbone
-            portrayal["color"] = "#4f81bd"
-            portrayal["weight"] = 2.8
-            portrayal["opacity"] = 0.6
-
-    elif isinstance(agent, MalolosChannel):
-        sev = getattr(agent, "current_sev", 0)
-        active = getattr(agent, "active", False)
-
-        if active:
-            portrayal["color"] = "#33aadd" if sev <= 1 else ("#e07b00" if sev == 2 else "#cc0000")
-            portrayal["weight"] = 3
-            portrayal["opacity"] = 0.95
-        else:
-            # always visible local channels
-            portrayal["color"] = "#8ecae6"
-            portrayal["weight"] = 1.8
-            portrayal["opacity"] = 0.5
- 
-    return portrayal
-
-
-class colorLegend(TextElement):
-    def __init__(self):
-        pass
-
-    def render(self, model):
-        legend = ""
-
-        # Main legend block
-        legend += "<div style='padding:10px;font-size:14px;'>"
-
-        legend += "<div style='display:grid;grid-template-columns:repeat(4,auto);gap:6px 18px;align-items:center;'>"
-        legend += "<strong>Legend</strong><span></span><span></span><span></span>"
-
-        # Row 1
-        legend += "<span><span style='display:inline-block;width:12px;height:12px;background:grey;border:1px solid #555;margin-right:6px;'></span>House</span>"
-        legend += "<span><span style='display:inline-block;width:12px;height:12px;background:orange;border:1px solid #555;margin-right:6px;'></span>Healthcare</span>"
-        legend += "<span><span style='display:inline-block;width:12px;height:12px;background:yellow;opacity:0.35;border:1px solid #555;margin-right:6px;'></span>Flood Low</span>"
-        legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:green;margin-right:6px;'></span>Person</span>"
-
-        # Row 2
-        legend += "<span><span style='display:inline-block;width:12px;height:12px;background:purple;border:1px solid #555;margin-right:6px;'></span>Business</span>"
-        legend += "<span><span style='display:inline-block;width:12px;height:12px;background:yellow;border:1px solid #555;margin-right:6px;'></span>School</span>"
-        legend += "<span><span style='display:inline-block;width:12px;height:12px;background:orange;opacity:0.35;border:1px solid #555;margin-right:6px;'></span>Flood Medium</span>"
-        legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:red;margin-right:6px;'></span>Stranded</span>"
-
-        # Row 3
-        legend += "<span><span style='display:inline-block;width:12px;height:12px;background:magenta;border:1px solid #555;margin-right:6px;'></span>Government</span>"
-        legend += "<span><span style='display:inline-block;width:12px;height:12px;background:blue;border:1px solid #555;margin-right:6px;'></span>Shelter</span>"
-        legend += "<span><span style='display:inline-block;width:12px;height:12px;background:red;opacity:0.35;border:1px solid #555;margin-right:6px;'></span>Flood High</span>"
-        legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:orange;margin-right:6px;'></span>Injured</span>"
-
-        # Row 4
-        legend += "<span></span><span></span><span></span>"
-        legend += "<span><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:black;margin-right:6px;'></span>Deceased</span>"
-
-        legend += "</div>"
-
-        # Networks block: 3 columns
-        legend += "<div style='margin-top:10px;'>"
-        legend += "<strong>Networks</strong>"
-        legend += "<div style='margin-top:6px;display:grid;grid-template-columns:repeat(3,auto);gap:6px 24px;align-items:center;'>"
-        legend += "<span><span style='display:inline-block;width:24px;height:3px;background:#b57edc;margin-right:6px;vertical-align:middle;'></span>Merged dam routes</span>"
-        legend += "<span><span style='display:inline-block;width:24px;height:3px;background:#4f81bd;margin-right:6px;vertical-align:middle;'></span>HydroRIVERS</span>"
-        legend += "<span><span style='display:inline-block;width:24px;height:3px;background:#8ecae6;margin-right:6px;vertical-align:middle;'></span>Malolos channels</span>"
-        legend += "</div>"
-        legend += "</div>"
-
-        # Active severity block: 3 columns
-        # legend += "<div style='margin-top:14px;'>"
-        # legend += "<strong>Active flow/severity</strong>"
-        # legend += "<div style='margin-top:6px;display:grid;grid-template-columns:repeat(3,auto);gap:6px 24px;align-items:center;'>"
-        # legend += "<span><span style='display:inline-block;width:24px;height:3px;background:#1a6faf;margin-right:6px;vertical-align:middle;'></span>Low severity</span>"
-        # legend += "<span><span style='display:inline-block;width:24px;height:3px;background:#e07b00;margin-right:6px;vertical-align:middle;'></span>Moderate severity</span>"
-        # legend += "<span><span style='display:inline-block;width:24px;height:3px;background:#cc0000;margin-right:6px;vertical-align:middle;'></span>High severity</span>"
-        # legend += "</div>"
-        # legend += "</div>"
-
-        legend += "</div>"
-        return legend
-
-class BarangayPanel(TextElement):
-    def render(self, model):
-        stats = model.compute_barangay_stats()
-
-        html = "<div style='padding:10px; font-size:12px; max-height:400px; overflow-y:auto;'>"
-        html += "<strong>Barangay Stats</strong><br><br>"
-        html += """
-        <table style='width:100%; border-collapse:collapse; text-align:center;'>
-            <tr style='background:#eee;'>
-                <th style='border:1px solid #ccc; padding:4px;'>Barangay</th>
-                <th style='border:1px solid #ccc; padding:4px;'>Population</th>
-                <th style='border:1px solid #ccc; padding:4px;'>Evacuated</th>
-                <th style='border:1px solid #ccc; padding:4px;'>Stranded</th>
-                <th style='border:1px solid #ccc; padding:4px;'>Injured</th>
-                <th style='border:1px solid #ccc; padding:4px;'>Dead</th>
-            </tr>
-        """
-
-        for brgy, data in sorted(
-            stats.items(),
-            key=lambda x: (
-                x[1]["population"],
-                x[1]["stranded"] + x[1]["injured"] + x[1]["dead"]
-            ),
-            reverse=True
-        ):
-            html += f"""
-            <tr>
-                <td style='border:1px solid #ccc; padding:4px;'>{brgy}</td>
-                <td style='border:1px solid #ccc; padding:4px;'>{data['population']}</td>
-                <td style='border:1px solid #ccc; padding:4px;'>{data['evacuated']}</td>
-                <td style='border:1px solid #ccc; padding:4px;'>{data['stranded']}</td>
-                <td style='border:1px solid #ccc; padding:4px;'>{data['injured']}</td>
-                <td style='border:1px solid #ccc; padding:4px;'>{data['dead']}</td>
-            </tr>
-            """
-
-        html += "</table>"
-        return html
-
-model_params = {
-    "N_persons": Slider("Number of persons", 300, 10, 1500, 10),
-    "shelter_cap_limit": Slider("Shelter Capacity(% of pop.)", 1, 0, 10, 0.3),
-    "healthcare_cap_limit": Slider("Healthcare Capacity(% of pop.)", 5, 0, 10, 1),
-    "shelter_funding": Slider("Shelter funds $", 50000, 5000, 200000, 5000),
-    "healthcare_funding": Slider("Healthcare funds $", 100000, 50000, 500000, 10000),
-    "pre_flood_days": Slider("Pre Flood Days", 8, 0, 90, 1),
-    "flood_days": Slider("Flood Days", 10, 3, 30, 1),
-    "post_flood_days": Slider("Post Flood Days", 14, 0, 90, 1),
-
-    "dam_scenario_name": Choice(
-        "Dam scenario",
-        value="S0",
-        choices=["S0", "S1", "S2", "S3"],
-    ),
+DECISION_THEORY_COLORS = {
+    "PMT": "blue",
+    "TPB": "orange",
+    "SCT": "green",
+    "CRT": "red",
 }
 
-if StaticText is not None:
-    _dam_scenario_legend_html = (
-        "<div style='font-size:12px; line-height:1.45; padding:6px 8px; "
-        "margin:2px 0 8px 0; background:#f7f7f7; border:1px solid #d9d9d9; border-radius:6px;'>"
-        "<strong>Scenario guide</strong><br>"
-        "<strong>S0</strong> - Baseline: no dam effect added.<br>"
-        "<strong>S1</strong> - Normal operations: low or typical release.<br>"
-        "<strong>S2</strong> - Controlled release: moderate pre-emptive release before spill.<br>"
-        "<strong>S3</strong> - Emergency spill: high-release stress test for downstream flooding."
-        "</div>"
+SERVER_STYLE_COLORS = {
+    # General decision chart colors from serverrun
+    "Preflood_Non_Evacuation_Measure_Implemented": "orange",
+    "Evacuated": "green",
+    "Duringflood_Coping_Action_Implemented": "red",
+    "Postflood_Adaptation_Measures_Planned": "blue",
+
+    # Persons chart colors from serverrun
+    "Stranded": "red",
+    "Injured": "orange",
+    "Health-compromised": "orange",
+    "Sheltered": "blue",
+    "Hospitalized": "grey",
+    "Death": "black",
+
+    # Entities chart colors from serverrun
+    "Houses_Flooded": "red",
+    "Schools_Flooded": "orange",
+    "Businesses_Flooded": "blue",
+
+    # Economic chart colors from serverrun
+    "Wealth_People": "blue",
+    "Wealth_Businesses": "green",
+    "Wealth_Shelter": "orange",
+    "Wealth_Healthcare": "purple",
+    "Wealth_Government": "red",
+
+    # SES grouped chart colors from serverrun
+    "SES_1_0_0.3": "green",
+    "SES_1_0.7_1": "red",
+    "SES_2_0_0.3": "blue",
+    "SES_2_0.7_1": "magenta",
+}
+
+# ========================= Data Loading ========================= #
+
+def load_results():
+    """Load per-scenario CSVs if available; otherwise load batchrun_results.csv."""
+    scenarios = ["S0", "S1", "S2", "S3"]
+    all_dfs = []
+
+    print("Reading scenario CSVs from:", CSV_DIR)
+    for scenario in scenarios:
+        path = os.path.join(CSV_DIR, f"results_{scenario}.csv")
+        if os.path.exists(path):
+            print("Loading:", path)
+            df = pd.read_csv(path)
+            df["dam_scenario_name"] = scenario
+            all_dfs.append(df)
+        else:
+            print(f"[WARNING] File not found: {path}")
+
+    if all_dfs:
+        df = pd.concat(all_dfs, ignore_index=True)
+    else:
+        fallback_path = os.path.join(PROJECT_DIR, "batchrun_results.csv")
+        if not os.path.exists(fallback_path):
+            raise FileNotFoundError(
+                "No scenario CSVs found and fallback batchrun_results.csv does not exist.\n"
+                f"Checked folder: {CSV_DIR}\n"
+                f"Checked fallback: {fallback_path}"
+            )
+        print("Loading fallback:", fallback_path)
+        df = pd.read_csv(fallback_path)
+
+    if CONVERT_STEP_TO_DAYS and "Step" in df.columns and df["Step"].max() > 100:
+        df["Step"] = df["Step"] / 24
+
+    return df
+
+results_df = load_results()
+print("Saving graphs to:", OUTPUT_DIR)
+
+# ========================= Helpers ========================= #
+
+def safe_filename(text):
+    return (
+        str(text)
+        .replace(" ", "_")
+        .replace("/", "_")
+        .replace("\\", "_")
+        .replace("(", "")
+        .replace(")", "")
+        .replace("%", "pct")
+        .replace(".", "p")
+        .replace(":", "")
     )
 
-    try:
-        model_params["dam_scenario_legend"] = StaticText(value=_dam_scenario_legend_html)
-    except TypeError:
-        try:
-            model_params["dam_scenario_legend"] = StaticText(_dam_scenario_legend_html)
-        except TypeError:
-            try:
-                model_params["dam_scenario_legend"] = StaticText("", _dam_scenario_legend_html)
-            except TypeError:
-                model_params["dam_scenario_legend"] = StaticText("", value=_dam_scenario_legend_html)
 
-model_params.update({
-    "houses_file": "../malolos_map_data/houses.zip",
-    "businesses_file": "../malolos_map_data/business.zip",
-    "schools_file": "../malolos_map_data/schools.zip",
-    "shelter_file": "../malolos_map_data/evacuation_centers.zip",
-    "healthcare_file": "../malolos_map_data/healthcare.zip",
-    "government_file": "../malolos_map_data/government.zip",
-    "flood_file_1": "../malolos_map_data/flood1.zip",
-    "flood_file_2": "../malolos_map_data/flood2.zip",
-    "flood_file_3": "../malolos_map_data/flood3.zip",
+def filter_scenario(df, scenario_filter=TARGET_SCENARIO):
+    if scenario_filter is not None and "dam_scenario_name" in df.columns:
+        filtered = df[df["dam_scenario_name"] == scenario_filter].copy()
+        if filtered.empty:
+            print(f"[WARNING] No rows found for scenario_filter={scenario_filter}.")
+        return filtered
+    return df.copy()
 
-    "dam_scenarios_file": "../malolos_map_data/dam_scenarios_simple.csv",
-    "merged_dams_file": "../malolos_map_data/merged_dams.zip",
-    "malolos_hydrorivers_file": "../malolos_map_data/malolos_hydrorivers.zip",
-    "malolos_channels_file": "../malolos_map_data/malolos_channels.zip",
-    "model_crs": "EPSG:32651"
-})
 
-# Create a canvas grid with given portrayal function and agent dimensions
-map_element = mg.visualization.MapModule(
-    agent_portrayal,
-    map_height=500,
-    map_width=860
-    # tiles=xyz.Esri.WorldImagery for satellite basemap
-)
+def prepare_average_data(df, columns, scenario_filter=TARGET_SCENARIO):
+    plot_df = filter_scenario(df, scenario_filter=scenario_filter)
+    available = [c for c in columns if c in plot_df.columns]
 
-# Add the legend to the visualization
-legend = colorLegend()
+    if "Step" not in available:
+        print("[WARNING] Step column missing. Skipping plot.")
+        return None, []
 
-barangay_panel = BarangayPanel()
+    value_cols = [c for c in available if c != "Step"]
+    if not value_cols:
+        print(f"[WARNING] No value columns available from: {columns}")
+        return None, []
 
-#---------------------- SES index data visuals-----------------------------
-# Define a function to create SES-specific chart modules for decision-making phases
-def create_ses_charts(decision, ses_ranges):
-    charts = []
-    for ses_range in ses_ranges:
-        charts.append(
-            ChartModule([
-                {"Label": f"PMT_{decision}_{ses_range}", "Color": "blue"},
-                {"Label": f"TPB_{decision}_{ses_range}", "Color": "green"},
-                {"Label": f"SCT_{decision}_{ses_range}", "Color": "orange"},
-                {"Label": f"CRT_{decision}_{ses_range}", "Color": "red"}
-            ])
+    numeric_data = plot_df[["Step"] + value_cols].copy()
+    numeric_data.replace([np.inf, -np.inf], np.nan, inplace=True)
+
+    average_data = numeric_data.groupby("Step").mean()
+    return average_data, value_cols
+
+
+def plot_line_group(
+    df,
+    columns,
+    save_name,
+    y_label,
+    colors=None,
+    legend_labels=None,
+    x_range=(0, 38),
+    y_range=None,
+    x_interval=7,
+    y_interval=None,
+    scenario_filter=TARGET_SCENARIO,
+    one_line_per_figure=False,
+):
+    """
+    Plot a serverrun-equivalent chart category.
+
+    If one_line_per_figure=True, each variable is saved as its own figure.
+    If False, variables are grouped in one figure like serverrun ChartModule.
+    """
+    average_data, value_cols = prepare_average_data(df, columns, scenario_filter)
+    if average_data is None:
+        return
+
+    if one_line_per_figure:
+        for col in value_cols:
+            plot_line_group(
+                df=df,
+                columns=["Step", col],
+                save_name=f"{save_name}_{safe_filename(col)}",
+                y_label=y_label,
+                colors={col: colors.get(col) if isinstance(colors, dict) else None} if colors else None,
+                legend_labels={col: legend_labels.get(col) if isinstance(legend_labels, dict) else col} if legend_labels else None,
+                x_range=x_range,
+                y_range=y_range,
+                x_interval=x_interval,
+                y_interval=y_interval,
+                scenario_filter=scenario_filter,
+                one_line_per_figure=False,
+            )
+        return
+
+    plt.figure(figsize=(10, 6))
+    sns.set(style="white")
+
+    for col in value_cols:
+        label = legend_labels.get(col, col) if isinstance(legend_labels, dict) else col
+        color = colors.get(col, None) if isinstance(colors, dict) else None
+        sns.lineplot(
+            data=average_data,
+            x=average_data.index,
+            y=col,
+            label=label,
+            color=color,
+            linewidth=4,
         )
-    return charts
 
-# Define SES ranges and their corresponding colors for each index
-ses_index_1_ranges = ['SES_1_0_0.3', 'SES_1_0.7_1']
-ses_index_2_ranges = ['SES_2_0_0.3', 'SES_2_0.7_1']
-all_ses_ranges = ses_index_1_ranges + ses_index_2_ranges
-ses_index_1_colors = ['green', 'red']
-ses_index_2_colors = ['blue', 'magenta']
+    plt.xlabel("Days", fontsize=22)
+    plt.ylabel(y_label, fontsize=22)
 
-# Create SES-specific charts for decision phases
-preflood_non_evacuation_charts = create_ses_charts("preflood_non_evacuation_measure_implemented", all_ses_ranges)
-evacuation_charts = create_ses_charts("evacuation", all_ses_ranges)
-duringflood_coping_charts = create_ses_charts("duringflood_coping_action_implemented", all_ses_ranges)
-postflood_recovery_charts = create_ses_charts("postflood_adaptation_measures_planned", all_ses_ranges)
+    if x_range:
+        plt.xlim(x_range)
+        if x_interval:
+            plt.xticks(np.arange(x_range[0], x_range[1] + x_interval, x_interval), fontsize=18)
+    else:
+        plt.xticks(fontsize=18)
 
-# Define a function to create grouped SES charts for a given metric (e.g., Evacuated, Stranded)
-def create_grouped_ses_charts(metric, ses_ranges, colors):
-    return ChartModule([
-        {"Label": f"{metric}_{ses_range}", "Color": color} for ses_range, color in zip(ses_ranges, colors)
-    ])
+    if y_range:
+        plt.ylim(y_range)
+        if y_interval:
+            plt.yticks(np.arange(y_range[0], y_range[1] + y_interval, y_interval), fontsize=18)
+    else:
+        plt.yticks(fontsize=18)
 
-# Create grouped charts for selected SES-based metrics for index 1 and index 2 separately
-evacuated_chart_ses_1 = create_grouped_ses_charts("evacuated", ses_index_1_ranges, ses_index_1_colors)
-evacuated_chart_ses_2 = create_grouped_ses_charts("evacuated", ses_index_2_ranges, ses_index_2_colors)
+    plt.legend(fontsize=14)
+    plt.grid(False)
+    plt.tight_layout()
 
-stranded_chart_ses_1 = create_grouped_ses_charts("stranded", ses_index_1_ranges, ses_index_1_colors)
-stranded_chart_ses_2 = create_grouped_ses_charts("stranded", ses_index_2_ranges, ses_index_2_colors)
+    suffix = f"_{scenario_filter}" if scenario_filter else ""
+    save_path = os.path.join(OUTPUT_DIR, f"{save_name}{suffix}.png")
+    plt.savefig(save_path)
+    print("Graph saved to:", save_path)
+    plt.show()
+    plt.close()
 
-injured_chart_ses_1 = create_grouped_ses_charts("injured", ses_index_1_ranges, ses_index_1_colors)
-injured_chart_ses_2 = create_grouped_ses_charts("injured", ses_index_2_ranges, ses_index_2_colors)
+# ========================= Serverrun-Matched Graph Inventory ========================= #
 
-sheltered_chart_ses_1 = create_grouped_ses_charts("sheltered", ses_index_1_ranges, ses_index_1_colors)
-sheltered_chart_ses_2 = create_grouped_ses_charts("sheltered", ses_index_2_ranges, ses_index_2_colors)
+# Set this to True if you still want literally one variable per image.
+# Set False to match serverrun ChartModule grouping more closely.
+ONE_LINE_PER_FIGURE_FOR_GENERAL_CHARTS = False
 
-hospitalized_chart_ses_1 = create_grouped_ses_charts("hospitalized", ses_index_1_ranges, ses_index_1_colors)
-hospitalized_chart_ses_2 = create_grouped_ses_charts("hospitalized", ses_index_2_ranges, ses_index_2_colors)
+# ---------------- General charts, matching serverrun ---------------- #
 
-dead_chart_ses_1 = create_grouped_ses_charts("dead", ses_index_1_ranges, ses_index_1_colors)
-dead_chart_ses_2 = create_grouped_ses_charts("dead", ses_index_2_ranges, ses_index_2_colors)
-
-# General charts (not SES-specific)
-persons_chart = ChartModule([
-    {"Label": "Stranded", "Color": "red"},
-    {"Label": "Health-compromised", "Color": "orange"},
-    {"Label": "Sheltered", "Color": "blue"},
-    {"Label": "Hospitalized", "Color": "grey"},
-    {"Label": "Death", "Color": "black"}
-])
-
-decisions_chart = ChartModule([
-    {"Label": "Preflood_Non_Evacuation_Measure_Implemented", "Color": "orange"},
-    {"Label": "Evacuated", "Color": "green"},
-    {"Label": "Duringflood_Coping_Action_Implemented", "Color": "red"},
-    {"Label": "Postflood_Adaptation_Measures_Planned", "Color": "blue"}
-])
-
-entities_chart = ChartModule([
-    {"Label": "Houses_Flooded", "Color": "red"},
-    {"Label": "Schools_Flooded", "Color": "orange"},
-    {"Label": "Businesses_Flooded", "Color": "blue"}
-])
-
-economic_chart = ChartModule([
-    {"Label": "Wealth_People", "Color": "blue"},
-    {"Label": "Wealth_Businesses", "Color": "green"},
-    {"Label": "Wealth_Shelter", "Color": "orange"},
-    {"Label": "Wealth_Healthcare", "Color": "purple"},
-    {"Label": "Wealth_Government", "Color": "red"}
-])
-
-# Combine all the chart modules into a single list
-all_charts = (
-    [decisions_chart] + [persons_chart] + [entities_chart] + [economic_chart] + 
-    preflood_non_evacuation_charts + evacuation_charts + duringflood_coping_charts + 
-    postflood_recovery_charts + [evacuated_chart_ses_1, evacuated_chart_ses_2,
-                                 stranded_chart_ses_1, stranded_chart_ses_2,
-                                 injured_chart_ses_1, injured_chart_ses_2,
-                                 sheltered_chart_ses_1, sheltered_chart_ses_2,
-                                 hospitalized_chart_ses_1, hospitalized_chart_ses_2,
-                                 dead_chart_ses_1, dead_chart_ses_2]
+# Serverrun: decisions_chart
+plot_line_group(
+    df=results_df,
+    columns=[
+        "Step",
+        "Preflood_Non_Evacuation_Measure_Implemented",
+        "Evacuated",
+        "Duringflood_Coping_Action_Implemented",
+        "Postflood_Adaptation_Measures_Planned",
+    ],
+    save_name="server_decisions_chart",
+    y_label="Percentage of population",
+    colors=SERVER_STYLE_COLORS,
+    legend_labels={
+        "Preflood_Non_Evacuation_Measure_Implemented": "Pre-flood non-evacuation measures",
+        "Evacuated": "Evacuations",
+        "Duringflood_Coping_Action_Implemented": "During-flood coping actions",
+        "Postflood_Adaptation_Measures_Planned": "Post-flood adaptation measures",
+    },
+    x_range=(0, 38),
+    y_range=(0, 0.65),
+    x_interval=7,
+    y_interval=0.1,
+    one_line_per_figure=ONE_LINE_PER_FIGURE_FOR_GENERAL_CHARTS,
 )
 
-# Now you can pass all_charts to the server
-server = ModularServer(
-    FloodModel,
-    [map_element, legend, barangay_panel] + all_charts,
-    "Flood Model - Vulnerabilities and Decision Making",
-    model_params,
+# Serverrun: persons_chart
+plot_line_group(
+    df=results_df,
+    columns=["Step", "Stranded", "Injured", "Sheltered", "Hospitalized", "Death"],
+    save_name="server_persons_chart",
+    y_label="Percentage of population",
+    colors=SERVER_STYLE_COLORS,
+    legend_labels={
+        "Stranded": "Stranded",
+        "Injured": "Health-compromised",
+        "Sheltered": "Sheltered",
+        "Hospitalized": "Hospitalized",
+        "Death": "Deceased",
+    },
+    x_range=(0, 38),
+    y_range=(0, 0.3),
+    x_interval=7,
+    y_interval=0.1,
+    one_line_per_figure=ONE_LINE_PER_FIGURE_FOR_GENERAL_CHARTS,
 )
-            
-# Run the server
-server.port = 8521  # The default port number
-server.launch()  
-    
-# Measure resource usage after the run
-mem_after, cpu_after = get_resource_usage()
-print(f"Memory usage after batch run: {mem_after:.2f} MB")
-print(f"CPU usage after batch run: {cpu_after:.2f}%")
+
+# Serverrun: entities_chart
+plot_line_group(
+    df=results_df,
+    columns=["Step", "Houses_Flooded", "Schools_Flooded", "Businesses_Flooded"],
+    save_name="server_entities_chart",
+    y_label="Proportion of flooded structures",
+    colors=SERVER_STYLE_COLORS,
+    legend_labels={
+        "Houses_Flooded": "Homes",
+        "Schools_Flooded": "Schools",
+        "Businesses_Flooded": "Businesses",
+    },
+    x_range=(0, 38),
+    y_range=(0, 0.8),
+    x_interval=7,
+    y_interval=0.2,
+    one_line_per_figure=ONE_LINE_PER_FIGURE_FOR_GENERAL_CHARTS,
+)
+
+# Serverrun: economic_chart
+plot_line_group(
+    df=results_df,
+    columns=[
+        "Step",
+        "Wealth_People",
+        "Wealth_Businesses",
+        "Wealth_Shelter",
+        "Wealth_Healthcare",
+        "Wealth_Government",
+    ],
+    save_name="server_economic_chart",
+    y_label="Relative wealth growth",
+    colors=SERVER_STYLE_COLORS,
+    legend_labels={
+        "Wealth_People": "Persons",
+        "Wealth_Businesses": "Businesses",
+        "Wealth_Shelter": "Shelter",
+        "Wealth_Healthcare": "Healthcare",
+        "Wealth_Government": "Government",
+    },
+    x_range=(0, 38),
+    y_range=(-0.5, 0.5),
+    x_interval=7,
+    y_interval=0.2,
+    one_line_per_figure=ONE_LINE_PER_FIGURE_FOR_GENERAL_CHARTS,
+)
+
+# ---------------- Decision-theory charts by SES range ---------------- #
+# Serverrun create_ses_charts() creates one chart per decision phase + SES range.
+# Here the same chart kinds are produced, with requested theory colors:
+# PMT blue, TPB orange, SCT green, CRT red.
+
+SES_RANGES = ["SES_1_0_0.3", "SES_1_0.7_1", "SES_2_0_0.3", "SES_2_0.7_1"]
+
+DECISION_PHASES = [
+    {
+        "decision": "preflood_non_evacuation_measure_implemented",
+        "save_prefix": "server_preflood_non_evacuation_decision",
+        "y_label": "Proportion of agents",
+        "x_range": (7, 14.1),
+        "y_range": None,
+        "x_interval": 7,
+        "y_interval": None,
+    },
+    {
+        "decision": "evacuation",
+        "save_prefix": "server_evacuation_decision",
+        "y_label": "Proportion of agents",
+        "x_range": (7, 24.1),
+        "y_range": None,
+        "x_interval": 7,
+        "y_interval": None,
+    },
+    {
+        "decision": "duringflood_coping_action_implemented",
+        "save_prefix": "server_duringflood_coping_decision",
+        "y_label": "Proportion of agents",
+        "x_range": (14, 24.1),
+        "y_range": None,
+        "x_interval": 7,
+        "y_interval": None,
+    },
+    {
+        "decision": "postflood_adaptation_measures_planned",
+        "save_prefix": "server_postflood_adaptation_decision",
+        "y_label": "Proportion of agents",
+        "x_range": (24, 38.2),
+        "y_range": None,
+        "x_interval": 7,
+        "y_interval": None,
+    },
+]
+
+for phase in DECISION_PHASES:
+    for ses_range in SES_RANGES:
+        decision_cols = [
+            "Step",
+            f"PMT_{phase['decision']}_{ses_range}",
+            f"TPB_{phase['decision']}_{ses_range}",
+            f"SCT_{phase['decision']}_{ses_range}",
+            f"CRT_{phase['decision']}_{ses_range}",
+        ]
+        plot_line_group(
+            df=results_df,
+            columns=decision_cols,
+            save_name=f"{phase['save_prefix']}_{safe_filename(ses_range)}",
+            y_label=phase["y_label"],
+            colors={
+                f"PMT_{phase['decision']}_{ses_range}": DECISION_THEORY_COLORS["PMT"],
+                f"TPB_{phase['decision']}_{ses_range}": DECISION_THEORY_COLORS["TPB"],
+                f"SCT_{phase['decision']}_{ses_range}": DECISION_THEORY_COLORS["SCT"],
+                f"CRT_{phase['decision']}_{ses_range}": DECISION_THEORY_COLORS["CRT"],
+            },
+            legend_labels={
+                f"PMT_{phase['decision']}_{ses_range}": "PMT",
+                f"TPB_{phase['decision']}_{ses_range}": "TPB",
+                f"SCT_{phase['decision']}_{ses_range}": "SCT",
+                f"CRT_{phase['decision']}_{ses_range}": "CRT",
+            },
+            x_range=phase["x_range"],
+            y_range=phase["y_range"],
+            x_interval=phase["x_interval"],
+            y_interval=phase["y_interval"],
+            one_line_per_figure=False,
+        )
+
+# ---------------- Grouped SES outcome charts ---------------- #
+# Serverrun creates two grouped charts per metric: one for SES index 1 and one for SES index 2.
+
+SES_OUTCOME_METRICS = [
+    {
+        "metric": "evacuated",
+        "save_prefix": "server_evacuated_ses",
+        "y_label": "Evacuated persons proportions",
+        "y_range": (0, 0.5),
+    },
+    {
+        "metric": "stranded",
+        "save_prefix": "server_stranded_ses",
+        "y_label": "Stranded persons proportions",
+        "y_range": (0, 0.3),
+    },
+    {
+        "metric": "injured",
+        "save_prefix": "server_injured_ses",
+        "y_label": "Health-compromised persons proportions",
+        "y_range": (0, 0.5),
+    },
+    {
+        "metric": "sheltered",
+        "save_prefix": "server_sheltered_ses",
+        "y_label": "Sheltered persons proportions",
+        "y_range": (0, 0.5),
+    },
+    {
+        "metric": "hospitalized",
+        "save_prefix": "server_hospitalized_ses",
+        "y_label": "Hospitalized persons proportions",
+        "y_range": (0, 0.5),
+    },
+    {
+        "metric": "dead",
+        "save_prefix": "server_dead_ses",
+        "y_label": "Deceased persons proportions",
+        "y_range": (0, 0.5),
+    },
+]
+
+SES_GROUPS = {
+    "SES_1": ["SES_1_0_0.3", "SES_1_0.7_1"],
+    "SES_2": ["SES_2_0_0.3", "SES_2_0.7_1"],
+}
+
+for metric_cfg in SES_OUTCOME_METRICS:
+    metric = metric_cfg["metric"]
+    for ses_index, ses_ranges in SES_GROUPS.items():
+        columns = ["Step"] + [f"{metric}_{ses_range}" for ses_range in ses_ranges]
+        plot_line_group(
+            df=results_df,
+            columns=columns,
+            save_name=f"{metric_cfg['save_prefix']}_{ses_index}",
+            y_label=metric_cfg["y_label"],
+            colors={
+                f"{metric}_{ses_ranges[0]}": SERVER_STYLE_COLORS[ses_ranges[0]],
+                f"{metric}_{ses_ranges[1]}": SERVER_STYLE_COLORS[ses_ranges[1]],
+            },
+            legend_labels={
+                f"{metric}_{ses_ranges[0]}": f"{ses_ranges[0]}",
+                f"{metric}_{ses_ranges[1]}": f"{ses_ranges[1]}",
+            },
+            x_range=(0, 38),
+            y_range=metric_cfg["y_range"],
+            x_interval=7,
+            y_interval=0.1,
+            one_line_per_figure=False,
+        )
+
+print("\nDone. Serverrun-matched batch graphs saved in:", OUTPUT_DIR)

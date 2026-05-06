@@ -51,13 +51,13 @@ print(f"Memory usage before batch run: {mem_before:.2f} MB")
 print(f"CPU usage before batch run: {cpu_before:.2f}%")
 
 batch_run_params = {
-    "N_persons": [100],
-    "dam_scenario_name": ["S0", "S1", "S2", "S3"],
+    "N_persons": [300],
+    "dam_scenario_name": ["S3"],
     "shelter_cap_limit": [1],
     "healthcare_cap_limit": [5],
     "shelter_funding": [50000],
     "healthcare_funding": [100000],
-    "pre_flood_days": [14],
+    "pre_flood_days": [8],
     "flood_days": [10],
     "post_flood_days": [14],
 
@@ -80,7 +80,7 @@ batch_run_params = {
 # Create and run the batch
 all_results = []
 
-for scenario in ["S0", "S1", "S2", "S3"]:
+for scenario in ["S3"]:
     print(f"Running scenario: {scenario}")
 
     params = batch_run_params.copy()

@@ -71,6 +71,10 @@ class FloodModel(Model):
             self.hydro_attenuation = 0.85
             self.hydro_max_downstream_steps = 10
 
+            # Local channel-to-channel propagation controls
+            self.channel_attenuation = 0.90
+            self.channel_max_steps = 5
+
             self.dam_scenario_lookup = {}
             if not self.dam_scenarios.empty:
                 scenario_df = self.dam_scenarios.copy()
@@ -473,16 +477,21 @@ class FloodModel(Model):
         # 3. Network update: dam route → HydroRIVERS → local channels
         # ------------------------------------------------------------------
         if self.disaster_period == "during_flood":
+            if self.schedule.time == flood_start_time:
+                self._debug_channel_propagation_printed = False
+
+            # Update dam route → HydroRIVERS → local channels
             self.update_dynamic_network_hazard()
 
-            if self.debug_network and self.schedule.time == flood_start_time:
-                self.debug_network_state("first flood step")
-
-        if self.disaster_period in ("during_flood", "post_flood"):
+            # Update person/house flood exposure using total flood severity
+            # total severity = static flood map + river bonus + channel bonus
             self._update_agent_flood_exposure()
 
             if self.debug_network and self.schedule.time == flood_start_time:
-                self.debug_person_exposure_state("first flood exposure update")
+                self._debug_channel_propagation_printed = True
+                self.debug_network_state("first flood step")
+                self.debug_channel_connections("first flood step")
+                self.debug_person_exposure_state("first flood step")
                 
         # ------------------------------------------------------------------
         # 5. Activate all agents
@@ -995,16 +1004,22 @@ class FloodModel(Model):
 
     def activate_malolos_channels(self):
         """
-        Activate Malolos local channels from:
-        1. active HydroRIVERS reaches through con_reach_
-        2. already-active local channels through the connection field
+        Activate Malolos local channels in two stages.
 
-        Direct HydroRIVERS connection:
+        Stage 1:
+        HydroRIVERS activates directly connected channels using:
             MalolosChannel.con_reach_ == MalolosHydroRiver.reach_id
 
-        Local channel connection:
-            MalolosChannel.connection == active MalolosChannel.reach_name
-            or MalolosChannel.connection == active MalolosChannel.reach_id
+        Stage 2:
+        Active local channels activate connected local channels using:
+            MalolosChannel.connection = space-separated local channel reach_id values
+
+        Example:
+            Atlag River reach_id = 1
+            Atlag River.connection = "112 12 113 111"
+
+        If Atlag River becomes active, channels 112, 12, 113, and 111
+        can also become active.
         """
 
         # ------------------------------------------------------------
@@ -1025,7 +1040,10 @@ class FloodModel(Model):
 
             con_id = self._clean_network_id(getattr(ch, "con_reach_", None))
 
-            if not con_id or con_id not in active_hydro:
+            if not con_id:
+                continue
+
+            if con_id not in active_hydro:
                 continue
 
             source = active_hydro[con_id]
@@ -1040,12 +1058,7 @@ class FloodModel(Model):
             source_stage = getattr(source, "current_stage", 0.0)
             source_sev = getattr(source, "current_sev", 0)
 
-            ch.active = True
-            ch.current_stage = max(
-                getattr(ch, "current_stage", 0.0),
-                source_stage * transfer_factor
-            )
-
+            inherited_stage = source_stage * transfer_factor
             inherited_sev = round(source_sev * transfer_factor)
 
             if source_sev > 0:
@@ -1053,6 +1066,11 @@ class FloodModel(Model):
 
             inherited_sev = max(0, min(3, inherited_sev))
 
+            ch.active = True
+            ch.current_stage = max(
+                getattr(ch, "current_stage", 0.0),
+                inherited_stage
+            )
             ch.current_sev = max(
                 getattr(ch, "current_sev", 0),
                 inherited_sev
@@ -1077,6 +1095,13 @@ class FloodModel(Model):
         max_channel_steps = max(1, max_channel_steps)
         channel_attenuation = max(0.0, min(1.0, channel_attenuation))
 
+        # Local channel lookup by reach_id
+        channel_index = {
+            self._clean_network_id(getattr(ch, "reach_id", None)): ch
+            for ch in getattr(self.space, "malolos_channels", [])
+            if self._clean_network_id(getattr(ch, "reach_id", None))
+        }
+
         for _ in range(max_channel_steps):
             changed = False
 
@@ -1085,51 +1110,56 @@ class FloodModel(Model):
                 if getattr(ch, "active", False)
             ]
 
-            active_channel_ids = {
-                self._clean_network_id(getattr(ch, "reach_id", None)): ch
-                for ch in active_channels
-                if self._clean_network_id(getattr(ch, "reach_id", None))
-            }
-
-            active_channel_names = {
-                str(getattr(ch, "reach_name", "")).strip().lower(): ch
-                for ch in active_channels
-                if str(getattr(ch, "reach_name", "")).strip()
-            }
-
-            for ch in getattr(self.space, "malolos_channels", []):
-                if getattr(ch, "active", False):
-                    continue
-
-                connection_raw = getattr(ch, "connection", None)
-                connection_id = self._clean_network_id(connection_raw)
-                connection_name = str(connection_raw).strip().lower()
-
-                source = None
-
-                if connection_id in active_channel_ids:
-                    source = active_channel_ids[connection_id]
-                elif connection_name in active_channel_names:
-                    source = active_channel_names[connection_name]
-
-                if source is None:
-                    continue
-
+            for source in active_channels:
                 source_stage = getattr(source, "current_stage", 0.0)
                 source_sev = getattr(source, "current_sev", 0)
 
                 if source_sev <= 0:
                     continue
 
-                inherited_stage = source_stage * channel_attenuation
-                inherited_sev = max(1, round(source_sev * channel_attenuation))
-                inherited_sev = max(0, min(3, inherited_sev))
+                connected_ids = self._parse_connection_ids(
+                    getattr(source, "connection", None)
+                )
 
-                ch.active = True
-                ch.current_stage = inherited_stage
-                ch.current_sev = inherited_sev
+                for target_id in connected_ids:
+                    if target_id not in channel_index:
+                        print(
+                            f"Warning: local channel connection ID {target_id} "
+                            f"not found in malolos_channels."
+                        )
+                        continue
 
-                changed = True
+                    target = channel_index[target_id]
+
+                    if getattr(target, "active", False):
+                        continue
+
+                    inherits_hazard = getattr(target, "inherits_hazard", True)
+
+                    if str(inherits_hazard).strip().lower() in ("false", "0", "no", "n"):
+                        continue
+
+                    inherited_stage = source_stage * channel_attenuation
+                    inherited_sev = round(source_sev * channel_attenuation)
+
+                    if source_sev > 0:
+                        inherited_sev = max(1, inherited_sev)
+
+                    inherited_sev = max(0, min(3, inherited_sev))
+
+                    target.active = True
+                    target.current_stage = inherited_stage
+                    target.current_sev = inherited_sev
+
+                if getattr(self, "debug_network", False):
+                    print(
+                        f"[step={self.schedule.time}, scenario={self.dam_scenario_name}] "
+                        f"Channel propagation: "
+                        f"{getattr(source, 'reach_id', None)} ({getattr(source, 'reach_name', None)}) "
+                        f"→ {getattr(target, 'reach_id', None)} ({getattr(target, 'reach_name', None)}), "
+                        f"sev={target.current_sev}"
+                    )                  
+                    changed = True
 
             if not changed:
                 break
@@ -1282,3 +1312,73 @@ class FloodModel(Model):
             pass
 
         return text
+    
+    def _parse_connection_ids(self, value):
+        """
+        Parse a local-channel connection field.
+
+        Example:
+        "112 12 113 111" -> ["112", "12", "113", "111"]
+
+        Supports:
+        - space-separated IDs
+        - comma-separated IDs
+        - semicolon-separated IDs
+        """
+
+        if value is None:
+            return []
+
+        text = str(value).strip()
+
+        if text.lower() in ("", "nan", "none", "null"):
+            return []
+
+        # Normalize separators
+        text = text.replace(",", " ")
+        text = text.replace(";", " ")
+
+        ids = []
+        for part in text.split():
+            cleaned = self._clean_network_id(part)
+            if cleaned:
+                ids.append(cleaned)
+
+        return ids
+
+    def debug_channel_connections(self, label=""):
+        """
+        Print active local channels and their connection targets.
+        Use this to verify HydroRIVERS → channel → connected channels propagation.
+        """
+
+        print("\n================ CHANNEL PROPAGATION CHECK ================")
+        print("Label:", label)
+        print("Time:", self.schedule.time)
+        print("Scenario:", self.dam_scenario_name)
+
+        active_channels = [
+            ch for ch in getattr(self.space, "malolos_channels", [])
+            if getattr(ch, "active", False)
+        ]
+
+        print("Active local channels:", len(active_channels))
+
+        for ch in active_channels:
+            reach_id = self._clean_network_id(getattr(ch, "reach_id", None))
+            reach_name = getattr(ch, "reach_name", None)
+            con_reach = self._clean_network_id(getattr(ch, "con_reach_", None))
+            connection = getattr(ch, "connection", None)
+            sev = getattr(ch, "current_sev", 0)
+            stage = getattr(ch, "current_stage", 0.0)
+
+            print(
+                "channel_id=", reach_id,
+                "name=", reach_name,
+                "con_reach_=", con_reach,
+                "connection=", repr(connection),
+                "sev=", sev,
+                "stage=", stage,
+            )
+
+        print("===========================================================\n")

@@ -1,0 +1,119 @@
+
+Dam Scenario Lookup Table Loaded:
+Selected dam scenario: S3
+Dam scenario lookup:
+Angat {'scenario_name': 'S3', 'dam_name': 'Angat', 'q_release': 1.0, 'severity': 3, 'reference_cms': 450.0}
+Ipo {'scenario_name': 'S3', 'dam_name': 'Ipo', 'q_release': 1.0, 'severity': 3, 'reference_cms': 497.5}
+Bustos {'scenario_name': 'S3', 'dam_name': 'Bustos', 'q_release': 0.85, 'severity': 3, 'reference_cms': 350.0}
+
+Flood Space - Loading Entity Agents Log
+houses: rows after cleaning = 27199
+houses: agents created = 27199
+houses: stored agents = 27199
+businesses: rows after cleaning = 985
+businesses: agents created = 985
+businesses: stored agents = 985
+schools: rows after cleaning = 518
+schools: agents created = 518
+schools: stored agents = 518
+shelter: rows after cleaning = 78
+shelter: agents created = 78
+shelter: stored agents = 78
+healthcare: rows after cleaning = 59
+healthcare: agents created = 59
+healthcare: stored agents = 59
+government: rows after cleaning = 91
+government: agents created = 91
+government: stored agents = 91
+
+Flood Space - Flood Maps Loading Log
+Flood areas added from ../malolos_map_data/flood1.zip: 1
+Flood areas added from ../malolos_map_data/flood2.zip: 1
+Flood areas added from ../malolos_map_data/flood3.zip: 1
+
+Flood Space - Loading River-Dam Network Log
+Loaded 33 merged_dams from ../malolos_map_data/merged_dams.zip
+Loaded 8 malolos_hydrorivers from ../malolos_map_data/malolos_hydrorivers.zip
+Loaded 29 malolos_channels from ../malolos_map_data/malolos_channels.zip
+
+Handoff ID Validation:
+Total handoff IDs from merged dams: 1
+Total HydroRIVERS reach IDs: 8
+Missing handoff IDs: set()
+
+================ RAW ID SAMPLE CHECK ================
+
+Merged dam handoff IDs:
+reach_id= np.int64(50012786) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'ipo_dam_entry'
+reach_id= np.int64(50012773) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'connector'
+reach_id= np.int64(50012465) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'connector'
+reach_id= np.int64(50012715) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'handoff'
+reach_id= np.int64(50012772) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'shared_corridor'
+reach_id= np.int64(50012697) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'connector'
+reach_id= np.int64(50012813) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'shared_corridor'
+reach_id= np.int64(50012522) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'shared_corridor'
+reach_id= np.int64(50012555) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'shared_corridor'
+reach_id= np.int64(50013020) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'shared_corridor'
+reach_id= np.int64(50012756) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'shared_corridor'
+reach_id= np.int64(50012489) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'bustos_entry'
+reach_id= np.int64(50012878) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'shared_corridor'
+reach_id= np.int64(50012648) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'shared_corridor'
+reach_id= np.int64(50013044) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'shared_corridor'
+reach_id= np.int64(50012664) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'shared_corridor'
+reach_id= np.int64(50012673) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'connector'
+reach_id= np.int64(50012706) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'shared_corridor'
+reach_id= np.int64(50012563) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'connector'
+reach_id= np.int64(50012829) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'shared_corridor'
+reach_id= np.int64(50012982) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'shared_corridor'
+reach_id= np.int64(50013000) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'connector'
+reach_id= np.int64(50012491) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'shared_corridor'
+reach_id= np.int64(50012663) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'shared_corridor'
+reach_id= np.int64(50012647) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'shared_corridor'
+reach_id= np.int64(50012676) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'shared_corridor'
+reach_id= np.int64(50012666) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'shared_corridor'
+reach_id= np.int64(50012675) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'connector'
+reach_id= np.int64(50012713) handoff_id= np.float64(50012742.0) dam_name= None source_dam= None seg_role= 'handoff_to_malolos'
+reach_id= np.int64(50012708) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'angat_dam_entry'
+reach_id= np.int64(50012863) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'shared_corridor'
+reach_id= np.int64(50012521) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'shared_corridor'
+reach_id= np.int64(50013108) handoff_id= np.float64(nan) dam_name= None source_dam= None seg_role= 'outlet'
+
+HydroRIVERS reach IDs:
+reach_id= np.int64(50012948) down_id= np.int64(50013021)
+reach_id= np.int64(50012947) down_id= np.int64(50013021)
+reach_id= np.int64(50013022) down_id= np.int64(50013078)
+reach_id= np.int64(50012742) down_id= np.int64(50012713)
+reach_id= np.int64(50013011) down_id= np.int64(50013022)
+reach_id= np.int64(50013021) down_id= np.int64(50013078)
+reach_id= np.int64(50012713) down_id= np.int64(50012673)
+reach_id= np.int64(50013078) down_id= np.int64(50013131)
+
+Channel connection IDs:
+channel_id= np.int64(1) name= 'Atlag River' con_reach_= np.float64(50012948.0)
+channel_id= np.int64(2) name= 'Malaway River' con_reach_= np.float64(nan)
+channel_id= np.int64(3) name= 'Galas River' con_reach_= np.float64(nan)
+channel_id= np.int64(4) name= 'Pamarawan River' con_reach_= np.float64(50012947.0)
+channel_id= np.int64(5) name= 'Pangagtan River' con_reach_= np.float64(nan)
+channel_id= np.int64(7) name= 'Lico-Lico' con_reach_= np.float64(50012947.0)
+channel_id= np.int64(6) name= 'Bugwan River' con_reach_= np.float64(nan)
+channel_id= np.int64(111) name= 'Sapang Pari' con_reach_= np.float64(nan)
+channel_id= np.int64(8) name= 'Matimbo River' con_reach_= np.float64(50013022.0)
+channel_id= np.int64(112) name= 'Sapang Dakila' con_reach_= np.float64(nan)
+channel_id= np.int64(9) name= 'Lagyo RIver' con_reach_= np.float64(50013022.0)
+channel_id= np.int64(113) name= 'Balayong Creek' con_reach_= np.float64(nan)
+channel_id= np.int64(115) name= 'Apulid-Malanggam Creek' con_reach_= np.float64(nan)
+channel_id= np.int64(11) name= 'Parila River' con_reach_= np.float64(50013021.0)
+channel_id= np.int64(12) name= 'Malolos River' con_reach_= np.float64(50012947.0)
+channel_id= np.int64(116) name= 'Caniogan Creek' con_reach_= np.float64(nan)
+channel_id= np.int64(117) name= 'Sapang Mabolo' con_reach_= np.float64(nan)
+channel_id= np.int64(13) name= 'Capitangan River' con_reach_= np.float64(50012742.0)
+channel_id= np.int64(118) name= 'Guinhawa Creek' con_reach_= np.float64(nan)
+channel_id= np.int64(1111) name= 'Mojon Creek' con_reach_= np.float64(nan)
+channel_id= np.int64(119) name= 'Estero de Mercado' con_reach_= np.float64(nan)
+channel_id= np.int64(11112) name= 'Santor Creek' con_reach_= np.float64(50013011.0)
+channel_id= np.int64(11113) name= 'Sapang Baliwag' con_reach_= np.float64(nan)
+channel_id= np.int64(11114) name= 'Sumapang Bata Creek' con_reach_= np.float64(50012948.0)
+channel_id= np.int64(11115) name= 'Sumapang Matanda Creek' con_reach_= np.float64(50012948.0)
+channel_id= np.int64(222) name= 'Connecting 12742' con_reach_= np.float64(50012742.0)
+channel_id= np.int64(224) name= 'Sapang Pari to Estero' con_reach_= np.float64(50012948.0)
+channel_id= np.int64(226)
