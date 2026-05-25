@@ -104,6 +104,7 @@ def plot_multi_line_graph(
     axis_label_size=22,
     tick_label_size=18,
     line_thickness=4,
+    legend_fontsize=18,
     scenario_filter=TARGET_SCENARIO,
     plot_title=None,
 ):
@@ -145,7 +146,7 @@ def plot_multi_line_graph(
     else:
         plt.yticks(fontsize=tick_label_size)
 
-    plt.legend(fontsize=14)
+    plt.legend(fontsize=legend_fontsize)
     plt.grid(False)
     plt.tight_layout()
 
@@ -169,6 +170,7 @@ def plot_single_theory_graph(
     scenario_filter=TARGET_SCENARIO,
     legend_label=None,
     plot_title=None,
+    legend_fontsize=18,
 ):
     avg, value_cols = prepare_group_average(df, ["Step", column_name], scenario_filter)
     if avg is None or not value_cols:
@@ -205,7 +207,7 @@ def plot_single_theory_graph(
     else:
         plt.yticks(fontsize=22)
 
-    plt.legend(fontsize=14)
+    plt.legend(fontsize=legend_fontsize)
     plt.grid(False)
     plt.tight_layout()
 
@@ -279,6 +281,7 @@ plot_multi_line_graph(
     ],
     save_filename="all_phases.png",
     y_label="Percentage of population",
+    legend_fontsize=16,
     legend_labels={
         "Preflood_Non_Evacuation_Measure_Implemented": "Preflood_Non_Evacuation_Measure_Implemented",
         "Evacuated": "Evacuated",
@@ -317,7 +320,7 @@ plot_multi_line_graph(
         "Hospitalized": "grey",
         "Death": "black",
     },
-    x_range=(0, 38),
+    x_range=(0, 21),
     y_range=(0, 0.045),
     x_interval=7,
     y_interval=0.005
@@ -339,7 +342,7 @@ plot_multi_line_graph(
         "Businesses_Flooded": "blue",
         "Schools_Flooded": "orange",
     },
-    x_range=(0, 38),
+    x_range=(0, 21),
     y_range=(0, 0.09),
     x_interval=7,
     y_interval=0.025
@@ -441,7 +444,7 @@ decision_groups = [
             "CRT": "CRT_preflood_non_evacuation_measure_implemented_SES_1_0.7_1",
         },
         "y_label": "Proportion of high-vulnerability agents",
-        "x_range": (0, 38.2),
+        "x_range": (0, 8),
         "y_range": (0, 0.5),
         "x_interval": 7,
         "y_interval": 0.05,
@@ -457,7 +460,7 @@ decision_groups = [
             "CRT": "CRT_preflood_non_evacuation_measure_implemented_SES_1_0_0.3",
         },
         "y_label": "Proportion of low-vulnerability agents",
-        "x_range": (0, 38.2),
+        "x_range": (0, 8),
         "y_range": (0, 0.03),
         "x_interval": 7,
         "y_interval": 0.01,
@@ -474,7 +477,7 @@ decision_groups = [
             "CRT": "CRT_evacuation_SES_1_0_0.3",
         },
         "y_label": "Proportion of low-vulnerability agents",
-        "x_range": (0, 38.2),
+        "x_range": (7, 21.1),
         "y_range": (0, 0.03),
         "x_interval": 7,
         "y_interval": 0.025,
@@ -491,7 +494,7 @@ decision_groups = [
             "CRT": "CRT_evacuation_SES_1_0.7_1",
         },
         "y_label": "Proportion of high-vulnerability agents",
-        "x_range": (0, 38.2),
+        "x_range": (0, 21.1),
         "y_range": (0, 0.6),
         "x_interval": 7,
         "y_interval": 0.05,
@@ -508,7 +511,7 @@ decision_groups = [
             "CRT": "CRT_duringflood_coping_action_implemented_SES_1_0_0.3",
         },
         "y_label": "Proportion of low-vulnerability agents",
-        "x_range": (0, 38.2),
+        "x_range": (7, 19.1),
         "y_range": (0, 0.03),
         "x_interval": 7,
         "y_interval": 0.006,
@@ -525,7 +528,7 @@ decision_groups = [
             "CRT": "CRT_duringflood_coping_action_implemented_SES_1_0.7_1",
         },
         "y_label": "Proportion of high-vulnerability agents",
-        "x_range": (0, 38.2),
+        "x_range": (7, 19.1),
         "y_range": (0, 0.2),
         "x_interval": 7,
         "y_interval": 0.05,
@@ -542,7 +545,7 @@ decision_groups = [
             "CRT": "CRT_postflood_adaptation_measures_planned_SES_1_0_0.3",
         },
         "y_label": "Proportion of low-vulnerability agents",
-        "x_range": (0, 38.2),
+        "x_range": (21, 38.2),
         "y_range": (0, 0.05),
         "x_interval": 7,
         "y_interval": 0.0125,
@@ -559,7 +562,7 @@ decision_groups = [
             "CRT": "CRT_postflood_adaptation_measures_planned_SES_1_0.7_1",
         },
         "y_label": "Proportion of high-vulnerability agents",
-        "x_range": (0, 38.2),
+        "x_range": (21, 38.2),
         "y_range": (0, 0.3),
         "x_interval": 7,
         "y_interval": 0.05,
